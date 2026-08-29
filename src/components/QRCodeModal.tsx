@@ -24,8 +24,15 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
 
   if (!isOpen) return null;
 
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-  const joinUrl = `${currentOrigin}?room=${roomId}&role=guest`;
+  // 실제 외부 스마트폰에서 스캔할 수 있도록 프로덕션 도메인 또는 현재 도메인 매핑
+  const currentOrigin =
+    typeof window !== 'undefined'
+      ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'https://omnitrans-live.vercel.app'
+        : window.location.origin
+      : 'https://omnitrans-live.vercel.app';
+
+  const joinUrl = `${currentOrigin}/?room=${roomId}&role=guest`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(joinUrl);
