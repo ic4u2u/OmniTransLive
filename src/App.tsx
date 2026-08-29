@@ -6,6 +6,7 @@ import { CustomDatasetModal } from './components/CustomDatasetModal';
 import { QRCodeModal } from './components/QRCodeModal';
 import { CheckoutModal } from './components/CheckoutModal';
 import { AdminDashboard } from './components/AdminDashboard';
+import { AdminLoginModal } from './components/AdminLoginModal';
 import { RoomSyncService } from './services/roomSync';
 import { speakText } from './services/translatorEngine';
 import { getUIText, type UILanguage } from './i18n/translations';
@@ -97,6 +98,32 @@ export const App: React.FC = () => {
   const [checkoutPlan, setCheckoutPlan] = useState<PlanType | null>(null);
   const [checkoutIsYearly, setCheckoutIsYearly] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // 관리자 인증 및 로그인 모달 상태
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('omnitrans_admin_auth') === 'true';
+    }
+    return false;
+  });
+  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(false);
+
+  // 관리자 단축키 (Ctrl + Shift + A) 및 URL 파라미터 감지
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        if (isAdminAuthenticated) {
+          setCurrentMode('admin');
+        } else {
+          setIsAdminLoginModalOpen(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAdminAuthenticated]);
 
   // 사용자 계정 및 요금제 상태 (기본 10분 무료 체험 제공)
   const [userAccount, setUserAccount] = useState<UserAccount>(() => {
@@ -291,6 +318,13 @@ export const App: React.FC = () => {
         t={t}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onOpenAdminLogin={() => {
+          if (isAdminAuthenticated) {
+            setCurrentMode('admin');
+          } else {
+            setIsAdminLoginModalOpen(true);
+          }
+        }}
       />
 
       {/* 토스트 알림 */}
@@ -344,6 +378,12 @@ export const App: React.FC = () => {
         {currentMode === 'admin' && (
           <AdminDashboard
             onBackToService={() => setCurrentMode('1to1')}
+            onLogout={() => {
+              setIsAdminAuthenticated(false);
+              sessionStorage.removeItem('omnitrans_admin_auth');
+              setCurrentMode('1to1');
+              showToast('🔒 관리자 로그아웃이 완료되었습니다.');
+            }}
             showToast={showToast}
           />
         )}
@@ -380,6 +420,19 @@ export const App: React.FC = () => {
         onDeleteDataset={handleDeleteDataset}
         onUpgradeClick={() => setCurrentMode('pricing')}
         t={t}
+      />
+
+      {/* 🔐 관리자 마스터 보안 로그인 모달 */}
+      <AdminLoginModal
+        isOpen={isAdminLoginModalOpen}
+        onClose={() => setIsAdminLoginModalOpen(false)}
+        onSuccess={() => {
+          setIsAdminAuthenticated(true);
+          sessionStorage.setItem('omnitrans_admin_auth', 'true');
+          setIsAdminLoginModalOpen(false);
+          setCurrentMode('admin');
+          showToast('🛡️ 관리자 보안 인증이 완료되었습니다. ADMIN CRM에 오신 것을 환영합니다.');
+        }}
       />
 
     </div>

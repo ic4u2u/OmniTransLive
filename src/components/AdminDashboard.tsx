@@ -21,6 +21,7 @@ import {
   Edit,
   ShieldCheck,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
 import type { AdminCustomer, AdminTransaction, AdminKPIStats } from '../types/admin';
 import type { PlanType } from '../types/translator';
@@ -28,11 +29,13 @@ import { INITIAL_CUSTOMERS, INITIAL_TRANSACTIONS, INITIAL_KPI_STATS } from '../d
 
 interface AdminDashboardProps {
   onBackToService: () => void;
+  onLogout?: () => void;
   showToast: (msg: string) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onBackToService,
+  onLogout,
   showToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'customers' | 'transactions' | 'analytics' | 'settings'>('customers');
@@ -162,7 +165,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        {/* 우측 서비스로 돌아가기 버튼 */}
+        {/* 우측 서비스로 돌아가기 & 로그아웃 버튼 */}
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => {
@@ -182,6 +185,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>라이브 통역 서비스로 이동</span>
             <ChevronRight className="w-4 h-4" />
           </button>
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="p-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 text-xs font-bold transition flex items-center gap-1.5"
+              title="관리자 보안 로그아웃"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">로그아웃</span>
+            </button>
+          )}
         </div>
       </header>
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Volume2, VolumeX, Globe, Sparkles, Clock, Database, Layers, QrCode, Check, ChevronDown, Sun, Moon, Shield } from 'lucide-react';
+import { Volume2, VolumeX, Globe, Sparkles, Clock, Database, Layers, QrCode, Check, ChevronDown, Sun, Moon, Lock } from 'lucide-react';
 import type { SessionMode, UserAccount } from '../types/translator';
 import { UI_LANGUAGE_OPTIONS, type UILanguage, type UIStringDictionary } from '../i18n/translations';
 
@@ -18,6 +18,7 @@ interface HeaderProps {
   t: UIStringDictionary;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  onOpenAdminLogin?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   t,
   theme,
   onToggleTheme,
+  onOpenAdminLogin,
 }) => {
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -64,8 +66,8 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-white/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 transition-colors shadow-sm">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+    <header className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 sticky top-0 z-30 transition-colors">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
         
         {/* 서비스 로고 & 게스트 상태 배지 */}
         <div 
@@ -93,11 +95,11 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* 메인 모드 선택 탭 (1:1 통역 / 요금제 / 관리자 CRM) */}
-        <nav className="hidden md:flex items-center p-1 bg-slate-100 dark:bg-slate-800/70 rounded-full border border-slate-200/60 dark:border-slate-700/60">
+        {/* 메인 모드 선택 탭 (1:1 통역 / 요금제) */}
+        <nav className="hidden sm:flex items-center p-1 bg-slate-100 dark:bg-slate-800/70 rounded-full border border-slate-200/60 dark:border-slate-700/60">
           <button
             onClick={() => onModeChange('1to1')}
-            className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-1.5 text-xs sm:text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
               currentMode === '1to1'
                 ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -109,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => onModeChange('pricing')}
-            className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-1.5 text-xs sm:text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
               currentMode === 'pricing'
                 ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -117,18 +119,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Layers className="w-3.5 h-3.5" />
             {t.tabPricing}
-          </button>
-
-          <button
-            onClick={() => onModeChange('admin')}
-            className={`px-3.5 py-1.5 text-xs sm:text-sm font-extrabold rounded-full transition-all flex items-center gap-1.5 ${
-              currentMode === 'admin'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'
-                : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>고객관리 (CRM)</span>
           </button>
         </nav>
 
@@ -254,6 +244,16 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <Moon className="w-4 h-4 text-indigo-600" />
             )}
+          </button>
+
+          {/* 🔐 관리자 전용 보안 로그인 버튼 (일반 사용자에게는 단순 보안 아이콘) */}
+          <button
+            onClick={onOpenAdminLogin}
+            title="관리자 보안 CRM 시스템 (Master PIN 필요)"
+            className="p-2 rounded-full text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100/60 dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 transition-all active:scale-95 shrink-0"
+            aria-label="Admin Security Login"
+          >
+            <Lock className="w-3.5 h-3.5" />
           </button>
 
           {/* 커스텀 데이터셋 버튼 */}
