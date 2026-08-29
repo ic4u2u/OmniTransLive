@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Volume2, VolumeX, Globe, Sparkles, Clock, Database, Layers, QrCode, Check, ChevronDown, Sun, Moon } from 'lucide-react';
+import { Volume2, VolumeX, Globe, Sparkles, Clock, Database, Layers, QrCode, Check, ChevronDown, Sun, Moon, Shield } from 'lucide-react';
 import type { SessionMode, UserAccount } from '../types/translator';
 import { UI_LANGUAGE_OPTIONS, type UILanguage, type UIStringDictionary } from '../i18n/translations';
 
@@ -93,30 +93,42 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* 메인 모드 선택 탭 (1:1 통역 / 요금제) */}
-        <nav className="hidden lg:flex items-center p-1 bg-slate-100 dark:bg-slate-800/70 rounded-full border border-slate-200/60 dark:border-slate-700/60">
+        {/* 메인 모드 선택 탭 (1:1 통역 / 요금제 / 관리자 CRM) */}
+        <nav className="hidden md:flex items-center p-1 bg-slate-100 dark:bg-slate-800/70 rounded-full border border-slate-200/60 dark:border-slate-700/60">
           <button
             onClick={() => onModeChange('1to1')}
-            className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
               currentMode === '1to1'
                 ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5" />
             {t.tab1to1}
           </button>
 
           <button
             onClick={() => onModeChange('pricing')}
-            className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-full transition-all flex items-center gap-1.5 ${
               currentMode === 'pricing'
                 ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Layers className="w-4 h-4" />
+            <Layers className="w-3.5 h-3.5" />
             {t.tabPricing}
+          </button>
+
+          <button
+            onClick={() => onModeChange('admin')}
+            className={`px-3.5 py-1.5 text-xs sm:text-sm font-extrabold rounded-full transition-all flex items-center gap-1.5 ${
+              currentMode === 'admin'
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'
+                : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>고객관리 (CRM)</span>
           </button>
         </nav>
 

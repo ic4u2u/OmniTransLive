@@ -5,6 +5,7 @@ import { PricingSection } from './components/PricingSection';
 import { CustomDatasetModal } from './components/CustomDatasetModal';
 import { QRCodeModal } from './components/QRCodeModal';
 import { CheckoutModal } from './components/CheckoutModal';
+import { AdminDashboard } from './components/AdminDashboard';
 import { RoomSyncService } from './services/roomSync';
 import { speakText } from './services/translatorEngine';
 import { getUIText, type UILanguage } from './i18n/translations';
@@ -337,6 +338,13 @@ export const App: React.FC = () => {
               setCurrentMode('1to1');
             }}
             t={t}
+          />
+        )}
+
+        {currentMode === 'admin' && (
+          <AdminDashboard
+            onBackToService={() => setCurrentMode('1to1')}
+            showToast={showToast}
           />
         )}
       </main>

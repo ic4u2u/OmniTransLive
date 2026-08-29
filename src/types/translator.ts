@@ -55,7 +55,7 @@ export interface TranslationMessage {
   isStreaming?: boolean;
 }
 
-export type SessionMode = '1to1' | 'pricing';
+export type SessionMode = '1to1' | 'pricing' | 'admin';
 
 export type PlanType = 'free' | 'lite' | 'standard' | 'premium';
 
