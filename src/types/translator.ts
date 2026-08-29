@@ -57,7 +57,7 @@ export interface TranslationMessage {
 
 export type SessionMode = '1to1' | 'pricing';
 
-export type PlanType = 'lite' | 'standard' | 'premium';
+export type PlanType = 'free' | 'lite' | 'standard' | 'premium';
 
 export interface PricingPlan {
   id: PlanType;

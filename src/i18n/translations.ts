@@ -81,7 +81,14 @@ export interface UIStringDictionary {
   currentPlan: string;
   startPlan: string;
   backToChat: string;
+  freeTrialBadge: string;
+  freeTrialMinutes: string;
   plans: {
+    free: {
+      name: string;
+      tagline: string;
+      features: string[];
+    };
     lite: {
       name: string;
       tagline: string;
@@ -230,8 +237,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: '현재 이용 중',
     startPlan: '시작하기',
     backToChat: '← 1:1 통역으로 돌아가기',
+    freeTrialBadge: '10분 무료 체험',
+    freeTrialMinutes: '10분 무료 제공',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: '카드 등록 없이 즉시 시작하는 10분 무료 통역',
+        features: [
+          '10분간 무료 실시간 음성/텍스트 통역',
+          '1:1 양방향 실시간 대화 모드 제공',
+          '전 세계 24개국 핵심 글로벌 언어 지원',
+          '실시간 음성 번역 On/Off 토글 지원',
+          '회원가입/카드 등록 없이 1초 만에 즉시 시작',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: '가벼운 개인 여행 및 일상 1:1 회화에 최적',
@@ -404,8 +424,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: 'Current Plan',
     startPlan: 'Get Started',
     backToChat: '← Back to 1:1 Interpretation',
+    freeTrialBadge: '10-Min Free Trial',
+    freeTrialMinutes: '10 mins free included',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: '10 minutes free interpretation without entering a credit card',
+        features: [
+          '10 minutes of free real-time voice & text interpretation',
+          '1:1 two-way live conversation mode',
+          '24 core global languages supported',
+          'Real-time voice toggle (TTS On/Off)',
+          'Instant start in 1 second without sign-up',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: 'Ideal for personal travel and daily 1:1 conversations',
@@ -577,8 +610,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: '利用中',
     startPlan: '開始する',
     backToChat: '← 1:1 通訳に戻る',
+    freeTrialBadge: '10分間 無料体験',
+    freeTrialMinutes: '10分間 無料提供',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: 'カード登録不要で今すぐ試せる10分間無料通訳',
+        features: [
+          '10分間 無料リアルタイム音声/テキスト通訳',
+          '1:1 リアルタイム対面会話モード',
+          '世界主要24言語グローバル対応',
+          'リアルタイム音声通訳 On/Off',
+          '登録不要で1秒で今すぐスタート',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: '個人旅行や日常の1:1会話に最適',
@@ -751,8 +797,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: '当前使用中',
     startPlan: '立即开通',
     backToChat: '← 返回 1:1 同传',
+    freeTrialBadge: '10分钟免费体验',
+    freeTrialMinutes: '免费赠送10分钟',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: '无需绑定信用卡，即刻开启10分钟免费同传体验',
+        features: [
+          '10分钟 免费实时语音/文本双向同传',
+          '1:1 面对面实时对话模式',
+          '支持全球24种主流核心语言',
+          '实时语音同传 开启/关闭切换',
+          '免注册免绑卡，1秒极速开启',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: '适合个人出境旅游与日常 1:1 交流',
@@ -924,8 +983,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: 'Plan Actual',
     startPlan: 'Comenzar',
     backToChat: '← Volver a Interpretación 1:1',
+    freeTrialBadge: 'Prueba de 10 min',
+    freeTrialMinutes: '10 minutos gratis incluidos',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: '10 minutos de interpretación gratis sin tarjeta de crédito',
+        features: [
+          '10 minutos de traducción 1:1 voz y texto gratis',
+          'Modo de conversación 1:1 en vivo',
+          '24 idiomas globales principales',
+          'Voz automática On/Off en tiempo real',
+          'Inicio instantáneo sin registro ni tarjeta',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: 'Ideal para viajes personales y conversaciones 1:1',
@@ -1098,8 +1170,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: 'Forfait Actuel',
     startPlan: 'Commencer',
     backToChat: '← Retour à l\'Interprétation 1:1',
+    freeTrialBadge: 'Essai de 10 min',
+    freeTrialMinutes: '10 min gratuites incluses',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: '10 minutes de traduction gratuite sans carte bancaire',
+        features: [
+          '10 minutes de traduction 1:1 vocale et texte gratuite',
+          'Mode conversation 1:1 en direct',
+          '24 langues mondiales prises en charge',
+          'Lecture vocale instantanée On/Off',
+          'Démarrage instantané sans inscription',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: 'Parfait pour les voyages et les échanges 1:1',
@@ -1272,8 +1357,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: 'Aktueller Tarif',
     startPlan: 'Starten',
     backToChat: '← Zurück zum 1:1 Dolmetschen',
+    freeTrialBadge: '10-Minuten-Test',
+    freeTrialMinutes: '10 Minuten kostenlos inklusive',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: '10 Minuten kostenloses Dolmetschen ohne Kreditkarte',
+        features: [
+          '10 Minuten kostenlose 1:1 Sprach- & Textübersetzung',
+          '1:1 Live-Gesprächsmodus',
+          '24 globale Kernsprachen unterstützt',
+          'Echtzeit-Sprachausgabe Ein/Aus-Schalter',
+          'Sofortiger Start ohne Registrierung',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: 'Ideal für persönliche Reisen und 1:1 Alltagsgespräche',
@@ -1446,8 +1544,21 @@ export const TRANSLATIONS: Partial<Record<UILanguage, UIStringDictionary>> = {
     currentPlan: 'Đang sử dụng',
     startPlan: 'Bắt đầu',
     backToChat: '← Quay lại Phiên dịch 1:1',
+    freeTrialBadge: 'Dùng thử 10 phút',
+    freeTrialMinutes: 'Tặng 10 phút miễn phí',
 
     plans: {
+      free: {
+        name: 'Free Trial',
+        tagline: 'Trải nghiệm 10 phút phiên dịch miễn phí không cần thẻ tín dụng',
+        features: [
+          '10 phút phiên dịch 1:1 giọng nói & văn bản miễn phí',
+          'Chế độ đối thoại trực tiếp 1:1',
+          'Hỗ trợ 24 ngôn ngữ toàn cầu cốt lõi',
+          'Bật/Tắt phát âm thanh trực tiếp',
+          'Bắt đầu ngay trong 1 giây không cần đăng ký',
+        ],
+      },
       lite: {
         name: 'Lite',
         tagline: 'Phù hợp cho du lịch cá nhân và giao tiếp 1:1 hàng ngày',

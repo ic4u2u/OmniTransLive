@@ -97,23 +97,41 @@ export const App: React.FC = () => {
   const [checkoutIsYearly, setCheckoutIsYearly] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 사용자 계정 및 요금제 상태
-  const [userAccount, setUserAccount] = useState<UserAccount>({
-    currentPlan: 'lite',
-    remainingMinutes: 100,
-    usedMinutes: 0,
-    voiceEnabled: true,
-    datasets: [
-      {
-        id: 'ds_default',
-        name: '글로벌 비즈니스 & 여행 기본 사전',
-        description: '자주 쓰이는 인사말, 예약, 안내 표현 최적화',
-        termsCount: 150,
-        createdAt: '2026-08-30',
-        active: true,
-      },
-    ],
+  // 사용자 계정 및 요금제 상태 (기본 10분 무료 체험 제공)
+  const [userAccount, setUserAccount] = useState<UserAccount>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('omnitrans_user_account');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return {
+      currentPlan: 'free',
+      remainingMinutes: 10,
+      usedMinutes: 0,
+      voiceEnabled: true,
+      datasets: [
+        {
+          id: 'ds_default',
+          name: '글로벌 비즈니스 & 여행 기본 사전',
+          description: '자주 쓰이는 인사말, 예약, 안내 표현 최적화',
+          termsCount: 150,
+          createdAt: '2026-08-30',
+          active: true,
+        },
+      ],
+    };
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('omnitrans_user_account', JSON.stringify(userAccount));
+    }
+  }, [userAccount]);
 
   const roomSyncRef = useRef<RoomSyncService | null>(null);
 
@@ -309,6 +327,15 @@ export const App: React.FC = () => {
             userAccount={userAccount}
             onOpenCheckout={handleOpenCheckout}
             onBackToChat={() => setCurrentMode('1to1')}
+            onSelectFreeTrial={() => {
+              setUserAccount((prev) => ({
+                ...prev,
+                currentPlan: 'free',
+                remainingMinutes: Math.max(prev.remainingMinutes, 10),
+              }));
+              showToast('🎁 10분 무료 체험이 적용되었습니다! 1:1 통역을 시작하세요.');
+              setCurrentMode('1to1');
+            }}
             t={t}
           />
         )}
