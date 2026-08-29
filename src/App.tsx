@@ -9,6 +9,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { RoomSyncService } from './services/roomSync';
 import { speakText } from './services/translatorEngine';
+import { sendAdminNotification } from './services/adminNotification';
 import { getUIText, type UILanguage } from './i18n/translations';
 import type { SessionMode, TranslationMessage, UserAccount, PlanType } from './types/translator';
 
@@ -246,15 +247,27 @@ export const App: React.FC = () => {
     setCheckoutIsYearly(isYearly);
   };
 
-  // 결제 성공 시 플랜 및 시간 즉시 충전
+  // 결제 성공 시 플랜 및 시간 즉시 충전 & 대표님 텔레그램 실시간 알림 발송
   const handlePaymentSuccess = (plan: PlanType) => {
     const minutes = plan === 'premium' ? 999999 : plan === 'standard' ? 500 : 100;
+    const amount = plan === 'premium' ? (checkoutIsYearly ? 959.88 : 99.99) : plan === 'standard' ? (checkoutIsYearly ? 287.88 : 29.99) : (checkoutIsYearly ? 95.88 : 9.99);
+
     setUserAccount((prev) => ({
       ...prev,
       currentPlan: plan,
       remainingMinutes: minutes,
     }));
     showToast(t.paymentSuccessToast);
+
+    // 대표님 텔레그램으로 결제 승인 알림 즉시 발송
+    sendAdminNotification({
+      type: 'PAYMENT',
+      customerName: '글로벌 고객 (웹 결제)',
+      plan,
+      amount,
+      currency: 'USD',
+      pgProvider: 'Global PG',
+    });
   };
 
   // 데이터셋 토글
