@@ -113,12 +113,18 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
     { lang: 'zh', name: '중국어', flag: '🇨🇳', text: '你好！我正在用自己的声音跨越语言障碍进行交流。' },
   ];
 
-  const handlePlaySample = async (sample: typeof SAMPLES[0]) => {
+  const handlePlaySample = (sample: typeof SAMPLES[0]) => {
     if (!profile) return;
     setIsPlayingSample(sample.lang);
 
-    await voiceCloneService.generateAndPlayClonedVoice(sample.text, sample.lang, profile);
-    setIsPlayingSample(null);
+    voiceCloneService.generateAndPlayClonedVoice(
+      sample.text, 
+      sample.lang, 
+      profile, 
+      () => {
+        setIsPlayingSample(null);
+      }
+    );
   };
 
   const getCategoryLabel = (cat?: string) => {

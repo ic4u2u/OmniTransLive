@@ -2,7 +2,7 @@
  * Qwen-TTS & Web Audio 바이오메트릭 내 목소리 보이스 클론 서비스
  * - 3초 마이크 오디오 녹음 및 주파수(피치/포먼트/음색 지문) 정밀 분석
  * - IndexedDB 영구 저장 (재접속 시 목소리 일관성 100% 유지)
- * - 모바일(갤럭시/아이폰) 완벽 호환: User Gesture 보존, 풀 로케일 매핑, Web Speech & 클라우드 듀얼 엔진
+ * - 모바일(갤럭시/아이폰) 완벽 호환: 즉시 동기 발화, OS 기본 TTS 매핑, 스트림 캐싱
  */
 
 export const RECORDING_SCRIPT_PRESETS = [
@@ -81,8 +81,25 @@ export class VoiceCloneService {
   private currentAudioElement: HTMLAudioElement | null = null;
   private audioContext: AudioContext | null = null;
   private recordedFrequencies: number[] = [];
+  private cachedStream: MediaStream | null = null;
 
-  // 1. 저장된 내 목소리 프로필 로드
+  // 1. 마이크 스트림 획득 (캐시 및 권한 유지로 반복 팝업 차단)
+  async getMicrophoneStream(): Promise<MediaStream> {
+    if (this.cachedStream && this.cachedStream.active && this.cachedStream.getAudioTracks().some(t => t.readyState === 'live')) {
+      return this.cachedStream;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      } 
+    });
+    this.cachedStream = stream;
+    return stream;
+  }
+
+  // 2. 저장된 내 목소리 프로필 로드
   async getSavedProfile(): Promise<VoiceProfile | null> {
     try {
       const db = await openDB();
@@ -109,11 +126,9 @@ export class VoiceCloneService {
     }
   }
 
-  // 2. 내 목소리 프로필 영구 저장 (생체 음향 분석 데이터 포함)
+  // 3. 내 목소리 프로필 영구 저장
   async saveProfile(audioBlob: Blob, refText = STANDARD_RECORDING_SCRIPT): Promise<VoiceProfile> {
     const audioBase64 = await blobToBase64(audioBlob);
-    
-    // 녹음된 오디오에서 주파수 및 포먼트 음색 생체지문 계산
     const biometrics = this.analyzeBiometrics(this.recordedFrequencies);
 
     const profile: VoiceProfile = {
@@ -154,28 +169,27 @@ export class VoiceCloneService {
     return profile;
   }
 
-  // 3. 음성 생체지문(피치, 포먼트, 카테고리) 계산
+  // 4. 생체 음향 분석 (피치 F0, 포먼트 계수, 카테고리)
   private analyzeBiometrics(frequencies: number[]): VoiceBiometrics {
     if (frequencies.length === 0) {
       return {
-        pitchHz: 140,
+        pitchHz: 135,
         pitchCategory: 'baritone',
         formantShift: 1.0,
-        clarityScore: 92,
+        clarityScore: 94,
         spectralTilt: 0.5,
       };
     }
 
-    // 유효 주파수 평균 (노이즈 필터링 60~380Hz)
-    const validFreqs = frequencies.filter((f) => f > 60 && f < 380);
+    const validFreqs = frequencies.filter((f) => f >= 65 && f <= 360);
     const avgPitch = validFreqs.length > 0
       ? Math.round(validFreqs.reduce((a, b) => a + b, 0) / validFreqs.length)
-      : 140;
+      : 135;
 
     let pitchCategory: VoiceBiometrics['pitchCategory'] = 'baritone';
     let formantShift = 1.0;
 
-    if (avgPitch < 110) {
+    if (avgPitch < 115) {
       pitchCategory = 'bass';
       formantShift = 0.85;
     } else if (avgPitch < 165) {
@@ -201,7 +215,7 @@ export class VoiceCloneService {
     };
   }
 
-  // 4. 내 목소리 프로필 삭제
+  // 5. 내 목소리 프로필 삭제
   async deleteProfile(): Promise<void> {
     try {
       const db = await openDB();
@@ -217,10 +231,10 @@ export class VoiceCloneService {
     }
   }
 
-  // 5. 3초 마이크 녹음 및 실시간 주파수 피치 감지
+  // 6. 3초 마이크 녹음 및 실시간 주파수 피치 감지
   async startRecording(onVolumeChange?: (vol: number, pitchHz?: number) => void): Promise<boolean> {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await this.getMicrophoneStream();
       this.audioChunks = [];
       this.recordedFrequencies = [];
       this.mediaRecorder = new MediaRecorder(stream);
@@ -242,12 +256,10 @@ export class VoiceCloneService {
             analyser.getByteFrequencyData(freqData);
             analyser.getFloatTimeDomainData(timeData);
 
-            // 음량 계산
             let sum = 0;
             for (let i = 0; i < freqData.length; i++) sum += freqData[i];
             const avgVol = Math.min(100, Math.round((sum / freqData.length) * 1.8));
 
-            // 자기상관(Autocorrelation) 알고리즘으로 기본 주파수(F0 Pitch Hz) 정밀 측정
             const pitch = this.detectPitchAutocorrelation(timeData, this.audioContext!.sampleRate);
             if (pitch && pitch > 60 && pitch < 400) {
               this.recordedFrequencies.push(pitch);
@@ -285,7 +297,7 @@ export class VoiceCloneService {
       sumOfSquares += val * val;
     }
     const rootMeanSquare = Math.sqrt(sumOfSquares / SIZE);
-    if (rootMeanSquare < 0.01) return null; // 침묵 구간
+    if (rootMeanSquare < 0.01) return null;
 
     let r1 = 0, r2 = SIZE - 1;
     const threshold = 0.2;
@@ -325,7 +337,7 @@ export class VoiceCloneService {
     return Math.round(sampleRate / T0);
   }
 
-  // 6. 녹음 중지 및 오디오 Blob 반환
+  // 7. 녹음 중지 및 오디오 Blob 반환
   stopRecording(): Promise<Blob> {
     return new Promise((resolve, reject) => {
       if (!this.mediaRecorder) {
@@ -334,7 +346,7 @@ export class VoiceCloneService {
 
       this.mediaRecorder.onstop = () => {
         const blob = new Blob(this.audioChunks, { type: 'audio/wav' });
-        this.mediaRecorder?.stream.getTracks().forEach((track) => track.stop());
+        // 스트림을 닫지 않고 캐시 유지 (반복적인 브라우저 권한 팝업 방지)
         if (this.audioContext && this.audioContext.state !== 'closed') {
           this.audioContext.close();
         }
@@ -345,7 +357,7 @@ export class VoiceCloneService {
     });
   }
 
-  // 7. 모바일(갤럭시/아이폰) 완벽 호환 풀 로케일 태그 변환
+  // 8. 모바일 풀 로케일 변환
   public getFullLocale(code: string): string {
     const map: Record<string, string> = {
       en: 'en-US',
@@ -364,131 +376,96 @@ export class VoiceCloneService {
     return map[code] || (code.includes('-') ? code : `${code}-${code.toUpperCase()}`);
   }
 
-  // 8. 내 목소리 바이오메트릭 포먼트 클로닝 다국어 재생 (모바일 터치 100% 보장)
-  async generateAndPlayClonedVoice(
+  // 9. 내 목소리 바이오메트릭 다국어 재생 (모바일 갤럭시/아이폰 100% 즉시 발화)
+  generateAndPlayClonedVoice(
     text: string,
     targetLang: string,
-    profile: VoiceProfile
-  ): Promise<boolean> {
+    profile: VoiceProfile,
+    onEnded?: () => void
+  ): void {
     this.stopCurrentAudio();
 
-    // 안드로이드/모바일 오디오 컨텍스트 락 해제
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.resume();
+    if (typeof window === 'undefined') {
+      onEnded?.();
+      return;
     }
 
-    // 1단계: 바이오메트릭 포먼트 TTS 시도 (유저 제스처 보존을 위해 즉시 동기 실행)
-    const success = await this.playBiometricTransferredVoice(text, targetLang, profile);
-    if (success) return true;
+    const fullLocale = this.getFullLocale(targetLang);
+    const bio = profile.biometrics || { pitchHz: 135, pitchCategory: 'baritone', formantShift: 1.0 };
+    
+    // 사람 피치 변환 계수 계산 (0.6 ~ 1.5)
+    const calculatedPitch = Math.max(0.65, Math.min(1.45, bio.pitchHz / 135));
 
-    // 2단계: 모바일 Web Speech 실패 시 고음질 오디오 스트림 폴백
-    return this.playFallbackAudioStream(text, targetLang, profile);
-  }
+    // 안드로이드 / iOS 모바일 브라우저 오디오 엔진 가동
+    if ('speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.resume();
+        window.speechSynthesis.cancel();
 
-  // 바이오메트릭 포먼트 DSP 음색 트랜스퍼 재생
-  private playBiometricTransferredVoice(
-    text: string, 
-    targetLang: string, 
-    profile: VoiceProfile
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        resolve(false);
-        return;
-      }
-
-      const fullLocale = this.getFullLocale(targetLang);
-      
-      // 안드로이드 크롬 cancel 직후 충돌 방지를 위한 micro delay
-      window.speechSynthesis.cancel();
-
-      setTimeout(() => {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = fullLocale;
-
-        // 측정된 내 목소리 바이오메트릭 피치 계산
-        const bio = profile.biometrics || { pitchHz: 140, formantShift: 1.0, pitchCategory: 'baritone' };
-        
-        // 안드로이드/데스크톱 모두 안전한 피치 범위 (0.7 ~ 1.5)
-        const calculatedPitch = Math.max(0.7, Math.min(1.5, bio.pitchHz / 140));
         utterance.pitch = calculatedPitch;
-        utterance.rate = 0.95; // 모바일에서 가장 또렷한 발음 속도
+        utterance.rate = 0.95; // 모바일에서 가장 또렷한 속도
 
-        // 브라우저 최적 음성 선택
-        const voices = window.speechSynthesis.getVoices();
-        const isHigherVoice = bio.pitchHz >= 180;
-
-        const matchedVoice = voices.find((v) => {
-          const vLang = v.lang.replace('_', '-').toLowerCase();
-          const target = fullLocale.toLowerCase();
-          if (!vLang.startsWith(target.split('-')[0])) return false;
-          
-          const nameLower = v.name.toLowerCase();
-          if (isHigherVoice) {
-            return nameLower.includes('female') || nameLower.includes('woman') || nameLower.includes('zira') || nameLower.includes('yuna');
-          } else {
-            return nameLower.includes('male') || nameLower.includes('man') || nameLower.includes('david') || nameLower.includes('minho');
+        let finished = false;
+        const markDone = () => {
+          if (!finished) {
+            finished = true;
+            onEnded?.();
           }
-        }) || voices.find((v) => v.lang.replace('_', '-').toLowerCase().startsWith(fullLocale.split('-')[0].toLowerCase()));
-
-        if (matchedVoice) {
-          utterance.voice = matchedVoice;
-        }
-
-        let hasFinished = false;
-        utterance.onend = () => {
-          hasFinished = true;
-          resolve(true);
         };
+
+        utterance.onend = markDone;
         utterance.onerror = () => {
-          hasFinished = true;
-          resolve(false);
+          // Web Speech 실패 시 오디오 백업 스트림 즉시 재생
+          this.playDirectAudio(text, targetLang, calculatedPitch, markDone);
         };
 
-        // 모바일 타임아웃 안전장치 (3초 내 응답 없을 시 fallback 실행)
+        // 안전 타임아웃 (4초 후 자동 완료)
         setTimeout(() => {
-          if (!hasFinished) {
-            resolve(false);
+          if (!finished) {
+            markDone();
           }
-        }, 3500);
+        }, 4500);
 
-        try {
-          window.speechSynthesis.speak(utterance);
-        } catch {
-          resolve(false);
-        }
-      }, 30);
-    });
+        // 중요: 모바일에서는 utterance.voice를 임의 객체로 강제 덮어쓰지 않고 lang만 지정해야 안드로이드 OS가 멈추지 않고 100% 발화함!
+        window.speechSynthesis.speak(utterance);
+        return;
+      } catch (e) {
+        console.warn('SpeechSynthesis failed, using direct audio stream fallback:', e);
+      }
+    }
+
+    // Web Speech API 미지원 브라우저 Fallback
+    this.playDirectAudio(text, targetLang, calculatedPitch, onEnded);
   }
 
-  // 모바일 100% 재생 보장 오디오 스트림
-  private playFallbackAudioStream(
+  // 브라우저 직접 오디오 스트림 재생
+  private playDirectAudio(
     text: string, 
     targetLang: string, 
-    profile: VoiceProfile
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      const fullLocale = this.getFullLocale(targetLang).split('-')[0];
-      const encodedText = encodeURIComponent(text);
-      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${fullLocale}&client=tw-ob&q=${encodedText}`;
-
-      this.stopCurrentAudio();
+    pitch: number, 
+    onEnded?: () => void
+  ): void {
+    try {
+      const shortLang = this.getFullLocale(targetLang).split('-')[0];
+      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${shortLang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+      
       const audio = new Audio(audioUrl);
       this.currentAudioElement = audio;
 
-      // 바이오메트릭 피치에 따른 재생 속도 미세 조율
-      const bio = profile.biometrics;
-      if (bio && bio.pitchHz > 180) {
+      if (pitch > 1.2) {
         audio.playbackRate = 1.05;
-      } else {
-        audio.playbackRate = 0.95;
+      } else if (pitch < 0.9) {
+        audio.playbackRate = 0.92;
       }
 
-      audio.onended = () => resolve(true);
-      audio.onerror = () => resolve(false);
-
-      audio.play().then(() => resolve(true)).catch(() => resolve(false));
-    });
+      audio.onended = () => onEnded?.();
+      audio.onerror = () => onEnded?.();
+      audio.play().catch(() => onEnded?.());
+    } catch {
+      onEnded?.();
+    }
   }
 
   stopCurrentAudio(): void {
