@@ -13,6 +13,9 @@ export const RECORDING_SCRIPT_PRESETS = [
 
 export const STANDARD_RECORDING_SCRIPT = RECORDING_SCRIPT_PRESETS[0];
 
+// 기본 구동 중인 Colab AI 보이스 클론 백엔드 서버 URL
+export const DEFAULT_COLAB_SERVER_URL = 'https://8000-m-s-kkb-use1c1-2p5vpgraj1tz-c.us-east1-1.prod.colab.dev';
+
 export interface VoiceBiometrics {
   pitchHz: number;          // 기본 주파수 (예: 남성 85-160Hz, 여성 165-255Hz)
   pitchCategory: 'bass' | 'baritone' | 'tenor' | 'alto' | 'soprano';
@@ -376,27 +379,142 @@ export class VoiceCloneService {
     return map[code] || (code.includes('-') ? code : `${code}-${code.toUpperCase()}`);
   }
 
-  // 9. 내 목소리 바이오메트릭 다국어 재생 (모바일 갤럭시/아이폰 100% 즉시 발화)
-  generateAndPlayClonedVoice(
+  // Qwen-TTS 다국어 언어명 매핑
+  private getQwenLanguageName(code: string): string {
+    const lang = code.split('-')[0].toLowerCase();
+    const map: Record<string, string> = {
+      ko: 'Korean',
+      en: 'English',
+      ja: 'Japanese',
+      zh: 'Chinese',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+      vi: 'Vietnamese',
+      th: 'Thai',
+      id: 'Indonesian',
+      ru: 'Russian',
+    };
+    return map[lang] || 'English';
+  }
+
+  // 모바일 브라우저 오디오 언락 (마이크/터치 제스처 시점 호출)
+  public unlockMobileAudio(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.resume();
+      }
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        ctx.resume().then(() => {
+          if (ctx.state === 'running') {
+            ctx.close();
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Audio unlock warning:', e);
+    }
+  }
+
+  // 9. 내 목소리 바이오메트릭 / Qwen-TTS 다국어 재생 (Colab 실시간 AI 클론 + 로컬 Fallback)
+  async generateAndPlayClonedVoice(
     text: string,
     targetLang: string,
     profile: VoiceProfile,
     onEnded?: () => void
-  ): void {
+  ): Promise<void> {
     this.stopCurrentAudio();
+    this.unlockMobileAudio();
 
     if (typeof window === 'undefined') {
       onEnded?.();
       return;
     }
 
+    // 1단계: 저장된 Colab AI 서버 엔드포인트 또는 기본 등록된 Colab 주소 확인
+    const serverUrl = 
+      localStorage.getItem('omnitrans_qwen_server_url') || 
+      (window as any).__OMNITRANS_QWEN_URL || 
+      DEFAULT_COLAB_SERVER_URL;
+    
+    if (serverUrl && profile.audioBase64) {
+      try {
+        const cleanUrl = serverUrl.replace(/\/+$/, '');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4초 타임아웃
+
+        const res = await fetch(`${cleanUrl}/generate_voice_clone`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text,
+            language: this.getQwenLanguageName(targetLang),
+            ref_audio_base64: profile.audioBase64,
+            ref_text: profile.refText || STANDARD_RECORDING_SCRIPT,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.audio_base64) {
+            this.playBase64Audio(data.audio_base64, onEnded);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Colab Qwen-TTS server error/timeout, falling back to local biometric voice:', err);
+      }
+    }
+
+    // 2단계: 로컬 Web Audio & SpeechSynthesis 바이오메트릭 피치 튜닝 재생
+    this.playLocalBiometricVoice(text, targetLang, profile, onEnded);
+  }
+
+  // Base64 오디오 직접 재생
+  private playBase64Audio(base64Data: string, onEnded?: () => void): void {
+    try {
+      const audio = new Audio(base64Data);
+      this.currentAudioElement = audio;
+
+      let finished = false;
+      const done = () => {
+        if (!finished) {
+          finished = true;
+          onEnded?.();
+        }
+      };
+
+      audio.onended = done;
+      audio.onerror = () => {
+        done();
+      };
+
+      audio.play().catch(() => done());
+    } catch {
+      onEnded?.();
+    }
+  }
+
+  // 로컬 브라우저 바이오메트릭 발화
+  private playLocalBiometricVoice(
+    text: string,
+    targetLang: string,
+    profile: VoiceProfile,
+    onEnded?: () => void
+  ): void {
     const fullLocale = this.getFullLocale(targetLang);
     const bio = profile.biometrics || { pitchHz: 135, pitchCategory: 'baritone', formantShift: 1.0 };
     
-    // 사람 피치 변환 계수 계산 (0.6 ~ 1.5)
+    // 사람 피치 변환 계수 계산 (0.65 ~ 1.45)
     const calculatedPitch = Math.max(0.65, Math.min(1.45, bio.pitchHz / 135));
 
-    // 안드로이드 / iOS 모바일 브라우저 오디오 엔진 가동
     if ('speechSynthesis' in window) {
       try {
         window.speechSynthesis.resume();
@@ -405,7 +523,14 @@ export class VoiceCloneService {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = fullLocale;
         utterance.pitch = calculatedPitch;
-        utterance.rate = 0.95; // 모바일에서 가장 또렷한 속도
+        utterance.rate = 0.95;
+
+        // 안드로이드 / iOS 지원 목소리 매칭
+        const voices = window.speechSynthesis.getVoices();
+        const matched = voices.find(v => v.lang === fullLocale || v.lang.startsWith(targetLang.split('-')[0]));
+        if (matched) {
+          utterance.voice = matched;
+        }
 
         let finished = false;
         const markDone = () => {
@@ -417,26 +542,24 @@ export class VoiceCloneService {
 
         utterance.onend = markDone;
         utterance.onerror = () => {
-          // Web Speech 실패 시 오디오 백업 스트림 즉시 재생
           this.playDirectAudio(text, targetLang, calculatedPitch, markDone);
         };
 
-        // 안전 타임아웃 (4초 후 자동 완료)
+        // 안전 타임아웃
         setTimeout(() => {
           if (!finished) {
             markDone();
           }
-        }, 4500);
+        }, 5000);
 
-        // 중요: 모바일에서는 utterance.voice를 임의 객체로 강제 덮어쓰지 않고 lang만 지정해야 안드로이드 OS가 멈추지 않고 100% 발화함!
         window.speechSynthesis.speak(utterance);
         return;
       } catch (e) {
-        console.warn('SpeechSynthesis failed, using direct audio stream fallback:', e);
+        console.warn('SpeechSynthesis local speak error, fallback to stream:', e);
       }
     }
 
-    // Web Speech API 미지원 브라우저 Fallback
+    // Web Speech API 미지원 Fallback
     this.playDirectAudio(text, targetLang, calculatedPitch, onEnded);
   }
 
@@ -481,3 +604,4 @@ export class VoiceCloneService {
 }
 
 export const voiceCloneService = new VoiceCloneService();
+

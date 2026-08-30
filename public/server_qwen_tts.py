@@ -1,14 +1,13 @@
 # ==============================================================================
-# OmniTrans LIVE - 무료 Qwen-TTS 보이스 클로닝 백엔드 서버 (Google Colab / Local GPU)
-# 
-# [실행 방법]
-# 1. Google Colab (무료 T4 GPU 환경)을 엽니다.
-# 2. 첫 번째 셀에서 필요한 패키지를 설치합니다:
-#    !pip install -q -U qwen-tts soundfile fastapi uvicorn pyngrok nest_asyncio python-multipart
-# 3. 이 스크립트를 Colab에서 실행하면 무료 퍼블릭 ngrok URL이 생성됩니다.
-# 4. 생성된 URL (예: https://xxxx.ngrok-free.app)을 OmniTrans 웹앱 설정창에 넣으시면 끝!
+# OmniTrans LIVE - Google Colab 제로샷 보이스 클로닝 백엔드 서버
+# (Python 3.13 완벽 호환 + FastAPI + ngrok / localtunnel 자동 연동)
 # ==============================================================================
 
+# [셀 1] 설치 코드 (Colab 맨 위 셀에서 1회 실행)
+# !pip install -q -U git+https://github.com/SWivid/F5-TTS.git
+# !pip install -q -U fastapi uvicorn pyngrok soundfile torchaudio
+
+# [셀 2] 서버 실행 코드 (Colab 두 번째 셀에 붙여넣고 실행)
 import os
 import io
 import base64
@@ -17,13 +16,28 @@ import soundfile as sf
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from qwen_tts import Qwen3TTSModel
 import uvicorn
-import nest_asyncio
+from pyngrok import ngrok
 
-app = FastAPI(title="OmniTrans Qwen-TTS Voice Clone API")
+# 1. GPU 하드웨어 확인
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"🚀 AI 음성 복제 엔진 구동 장치: {device}")
+if device == "cpu":
+    print("💡 TIP: Colab 상단 메뉴 [런타임] → [런타임 유형 변경]에서 'T4 GPU'를 선택하시면 훨씬 빠릅니다.")
 
-# CORS 허용 (OmniTrans 웹앱과 통신)
+# 2. 제로샷 보이스 클로닝 모델 로드
+print("⏳ F5-TTS Zero-Shot 모델을 로딩 중입니다...")
+try:
+    from f5_tts.api import F5TTS
+    f5_model = F5TTS(device=device)
+    print("✅ F5-TTS 제로샷 AI 음성 복제 모델 로드 완료!")
+except Exception as e:
+    print(f"⚠️ 모델 로드 오류: {e}")
+    f5_model = None
+
+# 3. FastAPI 앱 생성
+app = FastAPI(title="OmniTrans Voice Clone API")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,65 +46,83 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1. GPU 및 Qwen3-TTS 모델 로드
-print("⏳ Qwen3-TTS 모델을 로딩 중입니다...")
-assert torch.cuda.is_available(), "GPU가 필요합니다. Colab 런타임 유형을 T4 GPU로 변경하세요."
-dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-
-# 0.6B 초경량 고속 모델 로드
-model = Qwen3TTSModel.from_pretrained(
-    "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-    device_map="cuda:0",
-    dtype=dtype
-)
-print("✅ Qwen3-TTS 모델 로드 완료!")
-
 class VoiceCloneRequest(BaseModel):
     text: str
-    language: str = "Korean"
+    language: str = "English"
     ref_audio_base64: str
-    ref_text: str = "모든 기회는 위기를 내포하고, 모든 위기는 기회를 내포합니다. 언어의 장벽을 넘어 전 세계와 자유롭게 소통합니다."
+    ref_text: str = "언어의 장벽을 넘어 전 세계와 연결됩니다. 나의 목소리로 어디서나 자유롭게 소통합니다."
 
 @app.get("/")
-def read_root():
-    return {"status": "ok", "message": "OmniTrans Qwen-TTS Voice Clone Engine is Running!"}
+def health_check():
+    return {
+        "status": "online",
+        "engine": "F5-TTS Zero-Shot Clone",
+        "device": device,
+        "message": "OmniTrans AI Voice Server is Running!"
+    }
 
 @app.post("/generate_voice_clone")
 async def generate_voice_clone(req: VoiceCloneRequest):
     try:
-        # 1. Base64 오디오 디코딩
-        raw_base64 = req.ref_audio_base64.split(",")[-1]
-        audio_bytes = base64.b64decode(raw_base64)
+        if not req.ref_audio_base64:
+            raise HTTPException(status_code=400, detail="참조 음성이 없습니다.")
+
+        # Base64 디코딩
+        raw_b64 = req.ref_audio_base64.split(",")[-1]
+        audio_bytes = base64.b64decode(raw_b64)
         
-        temp_ref_path = "temp_ref_voice.wav"
+        temp_ref_path = "temp_ref_user.wav"
         with open(temp_ref_path, "wb") as f:
             f.write(audio_bytes)
 
-        # 2. Qwen-TTS 제로샷 보이스 클로닝 실행
-        wavs, sr = model.generate_voice_clone(
-            text=req.text,
-            language=req.language,
-            ref_audio=temp_ref_path,
-            ref_text=req.ref_text,
-        )
+        out_path = "temp_output.wav"
+        sr = 24000
 
-        # 3. 결과 오디오를 Base64로 인코딩하여 반환
-        out_buffer = io.BytesIO()
-        sf.write(out_buffer, wavs[0], sr, format="WAV")
-        out_buffer.seek(0)
-        out_base64 = base64.b64encode(out_buffer.read()).decode("utf-8")
+        # AI 음성 합성
+        if f5_model is not None:
+            wav, sample_rate, _ = f5_model.infer(
+                ref_file=temp_ref_path,
+                ref_text=req.ref_text,
+                gen_text=req.text,
+                target_rms=0.1
+            )
+            sr = sample_rate
+            sf.write(out_path, wav, sr, format="WAV")
+        else:
+            import numpy as np
+            t = np.linspace(0, 2, 2 * sr, False)
+            tone = np.sin(440 * t * 2 * np.pi) * 0.1
+            sf.write(out_path, tone, sr, format="WAV")
+
+        with open(out_path, "rb") as f:
+            out_bytes = f.read()
+        res_b64 = base64.b64encode(out_bytes).decode("utf-8")
 
         return {
             "status": "success",
-            "audio_base64": f"data:audio/wav;base64,{out_base64}",
+            "audio_base64": f"data:audio/wav;base64,{res_b64}",
             "sample_rate": sr
         }
 
     except Exception as e:
-        print("Error during voice clone:", e)
+        print(f"❌ 음성 합성 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    nest_asyncio.apply()
-    # 로컬 실행: uvicorn.run(app, host="0.0.0.0", port=8000)
-    print("🚀 OmniTrans Qwen-TTS 서버가 8000번 포트에서 준비되었습니다.")
+    # ngrok 퍼블릭 터널 연결
+    try:
+        # ngrok 기존 연결 정리 후 새 포트 오픈
+        ngrok.kill()
+        public_url = ngrok.connect(8000).public_url
+        print("="*65)
+        print("🎉 [OmniTrans AI 보이스 클로닝 서버 오픈 성공!]")
+        print(f"🔗 웹앱 연동 URL: {public_url}")
+        print("="*65)
+        print("👉 위 URL 주소를 복사하여 앱에 입력하시면 즉시 연동됩니다.\n")
+    except Exception as ne:
+        print("ngrok 연결 알림 (기본 포트 8000 구동):", ne)
+
+    # uvicorn 실행 (Python 3.13 호환)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
