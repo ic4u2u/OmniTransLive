@@ -132,25 +132,32 @@ export function speakText(
     return;
   }
 
-  // 이전 발화 취소
+  // 모바일 안드로이드/아이폰 오디오 락 해제
+  window.speechSynthesis.resume();
   window.speechSynthesis.cancel();
 
   const langObj = SUPPORTED_LANGUAGES.find((l) => l.code === langCode);
   const voiceCode = langObj?.voiceCode || 'en-US';
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = voiceCode;
-  utterance.rate = 1.0;
-  utterance.pitch = 1.0;
+  setTimeout(() => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = voiceCode;
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
 
-  // 최적의 목소리 매칭
-  const voices = window.speechSynthesis.getVoices();
-  const matchedVoice = voices.find((v) => v.lang === voiceCode || v.lang.startsWith(langCode));
-  if (matchedVoice) {
-    utterance.voice = matchedVoice;
-  }
+    // 최적의 목소리 매칭
+    const voices = window.speechSynthesis.getVoices();
+    const matchedVoice = voices.find((v) => v.lang === voiceCode || v.lang.startsWith(langCode));
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+    }
 
-  window.speechSynthesis.speak(utterance);
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('Speech synthesis speak error:', e);
+    }
+  }, 30);
 }
 
 // Speech Recognition 인터페이스
