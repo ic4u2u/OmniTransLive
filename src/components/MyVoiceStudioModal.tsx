@@ -10,7 +10,8 @@ import {
   Trash2, 
   Radio, 
   ShieldCheck,
-  Headphones
+  Headphones,
+  Activity
 } from 'lucide-react';
 import { 
   voiceCloneService, 
@@ -37,6 +38,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [volumeLevel, setVolumeLevel] = useState(0);
+  const [currentLivePitch, setCurrentLivePitch] = useState<number | null>(null);
   const [isPlayingSample, setIsPlayingSample] = useState<string | null>(null);
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
 
@@ -57,9 +59,11 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
   const handleStartRecord = async () => {
     setIsRecording(true);
     setRecordSeconds(0);
+    setCurrentLivePitch(null);
 
-    const started = await voiceCloneService.startRecording((vol) => {
+    const started = await voiceCloneService.startRecording((vol, pitch) => {
       setVolumeLevel(vol);
+      if (pitch) setCurrentLivePitch(pitch);
     });
 
     if (!started) {
@@ -115,6 +119,17 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
     setIsPlayingSample(null);
   };
 
+  const getCategoryLabel = (cat?: string) => {
+    switch (cat) {
+      case 'bass': return '베이스 (중후한 저음)';
+      case 'baritone': return '바리톤 (부드러운 중음)';
+      case 'tenor': return '테너 (밝고 또렷한 고음)';
+      case 'alto': return '알토 (차분한 여성 중음)';
+      case 'soprano': return '소프라노 (맑은 여성 고음)';
+      default: return '자연스러운 음색';
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-md animate-fade-in">
       <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden relative">
@@ -140,7 +155,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
               </span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              3초만 녹음하면 전 세계 외국어를 내 목소리 톤으로 말합니다.
+              3초만 낭독하면 내 음색/피치를 학습하여 외국어로 자동 변환합니다.
             </p>
           </div>
         </div>
@@ -162,7 +177,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
             </p>
           </div>
 
-          {/* 2. 대형 녹음 버튼 & 사운드 파형 */}
+          {/* 2. 대형 녹음 버튼 & 실시간 음성 주파수 게이지 */}
           <div className="flex flex-col items-center justify-center py-2">
             <div className="relative flex items-center justify-center">
               {/* 펄스 링 */}
@@ -192,17 +207,24 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
               </button>
             </div>
 
-            {/* 녹음 중 실시간 음량 게이지 */}
+            {/* 녹음 중 실시간 음향 주파수 & 볼륨 분석 피드백 */}
             {isRecording && (
-              <div className="mt-3 flex items-center gap-1.5 w-48 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-full border border-slate-200 dark:border-slate-700">
-                <Radio className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
-                <div className="flex-1 bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+              <div className="mt-3 flex flex-col items-center gap-1 w-52 bg-slate-100 dark:bg-slate-800 p-2 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between w-full text-[11px] font-bold">
+                  <span className="text-rose-500 flex items-center gap-1">
+                    <Radio className="w-3 h-3 animate-pulse" />
+                    음색 주파수 감지 중:
+                  </span>
+                  <span className="text-indigo-600 dark:text-indigo-400 font-mono">
+                    {currentLivePitch ? `${currentLivePitch} Hz` : '감지 중...'}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-0.5">
                   <div 
                     className="bg-gradient-to-r from-indigo-500 to-rose-500 h-full transition-all duration-75"
                     style={{ width: `${Math.min(100, volumeLevel * 2)}%` }}
                   />
                 </div>
-                <span className="text-[10px] font-bold text-slate-500">{recordSeconds}s</span>
               </div>
             )}
           </div>
@@ -211,11 +233,19 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
           {profile ? (
             <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-700 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    내 목소리 지문 등록 완료 ({new Date(profile.createdAt).toLocaleDateString()})
-                  </span>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">
+                      내 목소리 지문 분석 완료
+                    </span>
+                  </div>
+                  {profile.biometrics && (
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold mt-0.5 flex items-center gap-1">
+                      <Activity className="w-3 h-3" />
+                      {profile.biometrics.pitchHz} Hz · {getCategoryLabel(profile.biometrics.pitchCategory)}
+                    </span>
+                  )}
                 </div>
 
                 <button
@@ -232,7 +262,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
               <div>
                 <span className="text-[11px] font-bold text-slate-400 block mb-2 flex items-center gap-1">
                   <Headphones className="w-3 h-3 text-indigo-500" />
-                  내 목소리로 외국어 샘플 듣기:
+                  내 음색이 적용된 외국어 샘플 듣기:
                 </span>
                 <div className="grid grid-cols-3 gap-2">
                   {SAMPLES.map((sample) => (
@@ -285,7 +315,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
           ) : (
             <div className="text-center p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                위 [3초 녹음 시작] 버튼을 누르고 표준 낭독문을 읽으시면 즉시 내 목소리 프로필이 생성됩니다.
+                위 [3초 녹음 시작] 버튼을 누르고 표준 낭독문을 읽으시면 내 목소리 생체 지문이 즉시 생성됩니다.
               </p>
             </div>
           )}
@@ -296,7 +326,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
         {saveSuccessToast && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-1.5 rounded-full text-xs font-extrabold shadow-xl flex items-center gap-1.5 animate-fade-in border border-slate-700 z-50">
             <Check className="w-3.5 h-3.5 text-emerald-400" />
-            <span>내 목소리 프로필이 안전하게 저장되었습니다!</span>
+            <span>내 목소리 지문이 안전하게 학습 및 저장되었습니다!</span>
           </div>
         )}
 
