@@ -308,7 +308,7 @@ export const App: React.FC = () => {
   const customTerms: Record<string, string> = {};
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-indigo-500 selection:text-white relative">
+    <div className="h-[100dvh] bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-indigo-500 selection:text-white relative overflow-hidden">
       
       {/* 배경 장식 글로우 */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
@@ -342,14 +342,14 @@ export const App: React.FC = () => {
 
       {/* 토스트 알림 */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2.5 rounded-2xl shadow-xl text-xs font-bold animate-fade-in flex items-center gap-2 border border-slate-700">
+        <div className="fixed top-16 right-4 sm:right-6 z-50 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2.5 rounded-2xl shadow-xl text-xs font-bold animate-fade-in flex items-center gap-2 border border-slate-700">
           <span>🔔</span>
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* 메인 뷰 컨테이너 */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-6 flex flex-col relative z-10">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-2 sm:py-4 flex flex-col min-h-0 overflow-y-auto relative z-10">
         {currentMode === '1to1' && (
           <OneToOneTranslator
             messages={messages}

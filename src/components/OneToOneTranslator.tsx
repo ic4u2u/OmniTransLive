@@ -148,6 +148,10 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
     }
   };
 
+  // 텍스트 모달/바텀 인풋 상태
+  const [isTextInputOpen, setIsTextInputOpen] = useState(false);
+  const [textInputSpeaker, setTextInputSpeaker] = useState<'A' | 'B'>('A');
+
   // 마이크 토글
   const toggleMic = (speaker: 'A' | 'B') => {
     if (activeMic === speaker) {
@@ -196,6 +200,7 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
     processTranslation(speaker, text);
     if (speaker === 'A') setInputTextA('');
     else setInputTextB('');
+    setIsTextInputOpen(false);
   };
 
   // 텍스트 복사
@@ -230,41 +235,160 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  // ===================== [ 1. 마주보기(Face-to-Face) 50:50 분할 모드 ] =====================
+  if (isFaceToFace) {
+    const messagesA = messages.filter((m) => m.speakerId === 'A');
+    const messagesB = messages.filter((m) => m.speakerId === 'B');
+    const lastMsgA = messagesA[messagesA.length - 1];
+    const lastMsgB = messagesB[messagesB.length - 1];
+
+    return (
+      <div className="fixed inset-0 z-40 bg-slate-950 text-white flex flex-col select-none overflow-hidden animate-fade-in">
+        {/* 상단: 맞은편 상대방 영역 (180도 반전) */}
+        <div className="flex-1 bg-gradient-to-b from-purple-950/40 via-slate-900 to-slate-950 p-4 flex flex-col justify-between rotate-180 border-b border-purple-500/20 relative">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 bg-purple-900/40 px-3 py-1.5 rounded-full border border-purple-500/30">
+              <span className="text-xl">{langB.flag}</span>
+              <span className="text-sm font-black text-purple-300">{langB.name}</span>
+            </div>
+            <span className="text-xs font-bold text-slate-400">
+              {isPeerConnected ? t.peerPhone : t.speakerB}
+            </span>
+          </div>
+
+          {/* 상대방 최근 대화 표시 */}
+          <div className="flex-1 flex flex-col items-center justify-center my-2 text-center overflow-y-auto px-2">
+            {activeMic === 'B' && interimSpeech ? (
+              <div className="bg-purple-500/20 border-2 border-dashed border-purple-400 p-4 rounded-3xl animate-pulse w-full max-w-sm">
+                <p className="text-xs text-purple-300 font-bold mb-1">Listening...</p>
+                <p className="text-base font-extrabold text-white">"{interimSpeech}"</p>
+              </div>
+            ) : lastMsgA ? (
+              <div className="bg-purple-900/40 border border-purple-500/30 p-4 rounded-3xl max-w-sm w-full shadow-lg">
+                <p className="text-xs text-slate-400 mb-1">상대방이 한 말 번역:</p>
+                <p className="text-lg font-black text-white">{lastMsgA.translatedText}</p>
+                <p className="text-xs text-slate-400 mt-1">({lastMsgA.originalText})</p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 font-medium">
+                아래 마이크를 누르고 말씀하세요
+              </p>
+            )}
+          </div>
+
+          {/* 상대방 마이크 버튼 */}
+          <div className="flex items-center justify-center">
+            <button
+              onClick={() => toggleMic('B')}
+              className={`w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-xl ${
+                activeMic === 'B'
+                  ? 'bg-rose-500 text-white ring-8 ring-rose-500/30 animate-pulse'
+                  : 'bg-gradient-to-tr from-purple-600 to-pink-500 text-white shadow-purple-500/30'
+              }`}
+            >
+              {activeMic === 'B' ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
+            </button>
+          </div>
+        </div>
+
+        {/* 중앙 분할선 & 나가기 바 */}
+        <div className="h-10 bg-slate-900 border-y border-slate-800 flex items-center justify-between px-4 z-10 shrink-0">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold">
+            <RotateCw className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+            <span>마주보기 50:50 모드</span>
+          </div>
+          <button
+            onClick={() => setIsFaceToFace(false)}
+            className="text-xs font-bold px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-full border border-slate-700 transition"
+          >
+            일반 모드로 복귀
+          </button>
+        </div>
+
+        {/* 하단: 내 영역 (정방향) */}
+        <div className="flex-1 bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950/40 p-4 flex flex-col justify-between border-t border-indigo-500/20 relative">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 bg-indigo-900/40 px-3 py-1.5 rounded-full border border-indigo-500/30">
+              <span className="text-xl">{langA.flag}</span>
+              <span className="text-sm font-black text-indigo-300">{langA.name}</span>
+            </div>
+            <span className="text-xs font-bold text-slate-400">{t.speakerA} (나)</span>
+          </div>
+
+          {/* 내 방향 최근 번역 대화 표시 */}
+          <div className="flex-1 flex flex-col items-center justify-center my-2 text-center overflow-y-auto px-2">
+            {activeMic === 'A' && interimSpeech ? (
+              <div className="bg-indigo-500/20 border-2 border-dashed border-indigo-400 p-4 rounded-3xl animate-pulse w-full max-w-sm">
+                <p className="text-xs text-indigo-300 font-bold mb-1">음성 듣는 중...</p>
+                <p className="text-base font-extrabold text-white">"{interimSpeech}"</p>
+              </div>
+            ) : lastMsgB ? (
+              <div className="bg-indigo-900/40 border border-indigo-500/30 p-4 rounded-3xl max-w-sm w-full shadow-lg">
+                <p className="text-xs text-slate-400 mb-1">상대방이 한 말 번역:</p>
+                <p className="text-lg font-black text-white">{lastMsgB.translatedText}</p>
+                <p className="text-xs text-slate-400 mt-1">({lastMsgB.originalText})</p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 font-medium">
+                아래 마이크를 누르고 한국어로 말씀하세요
+              </p>
+            )}
+          </div>
+
+          {/* 내 마이크 버튼 */}
+          <div className="flex items-center justify-center">
+            <button
+              onClick={() => toggleMic('A')}
+              className={`w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-xl ${
+                activeMic === 'A'
+                  ? 'bg-rose-500 text-white ring-8 ring-rose-500/30 animate-pulse'
+                  : 'bg-gradient-to-tr from-indigo-600 to-cyan-500 text-white shadow-indigo-500/30'
+              }`}
+            >
+              {activeMic === 'A' ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===================== [ 2. 일반 모바일 최적화 뷰 ] =====================
   return (
-    <div className="flex-1 flex flex-col gap-3 min-h-0">
+    <div className="flex-1 flex flex-col h-full min-h-0 relative pb-24 md:pb-6">
       
       {/* 상대방 QR 연결 라이브 상태 배너 */}
       {isPeerConnected && (
-        <div className="bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 px-4 py-2.5 rounded-2xl flex items-center justify-between text-xs sm:text-sm font-bold shadow-sm animate-fade-in">
+        <div className="mb-2 bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 px-3.5 py-2 rounded-2xl flex items-center justify-between text-xs font-bold shadow-sm animate-fade-in shrink-0">
           <div className="flex items-center gap-2">
             <span className="flex h-2.5 w-2.5 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
-            <span>{t.peerLiveBanner}</span>
+            <span className="truncate">{t.peerLiveBanner}</span>
           </div>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 font-extrabold uppercase">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 font-extrabold uppercase shrink-0">
             LIVE SYNC
           </span>
         </div>
       )}
 
-      {/* 1:1 통역 상단 헤더 컨트롤 바 */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-3 sm:p-4 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      {/* 🚀 상단 슬림 언어 셀렉터 & 모바일 퀵 툴바 */}
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-2.5 sm:p-3.5 shadow-sm border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0 mb-3">
         
-        {/* 언어 선택 및 교환 컨트롤 */}
-        <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+        {/* 언어 선택 캡슐 (좌: 화자 A ⇄ 우: 화자 B) */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
           
-          {/* 화자 A 언어 */}
-          <div className="flex-1 flex items-center gap-1.5 bg-indigo-50/60 dark:bg-indigo-950/40 px-3 py-1.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/60">
-            <span className="text-lg">{langA.flag}</span>
+          {/* 화자 A 언어 드롭다운 */}
+          <div className="flex-1 min-w-0 flex items-center gap-1 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-xl shadow-xs">
+            <span className="text-base shrink-0">{langA.flag}</span>
             <select
               value={langA.code}
               onChange={(e) => {
                 const found = SUPPORTED_LANGUAGES.find((l) => l.code === e.target.value);
                 if (found) setLangA(found);
               }}
-              className="w-full bg-transparent text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 border-none p-0 focus:ring-0 cursor-pointer"
+              className="w-full bg-transparent text-xs font-black text-indigo-600 dark:text-indigo-400 border-none p-0 focus:ring-0 cursor-pointer truncate"
             >
               {['동아시아', '동남아/남아시아', '유럽', '중동/기타'].map((cat) => (
                 <optgroup key={`a-cat-${cat}`} label={`--- ${cat} ---`} className="font-bold text-slate-400 bg-white dark:bg-slate-900">
@@ -281,22 +405,22 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
           {/* 언어 교환 버튼 */}
           <button
             onClick={handleSwapLanguages}
-            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all active:scale-90 shrink-0"
+            className="p-2 rounded-xl bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 shadow-xs transition-all active:scale-90 shrink-0"
             title={t.swapLanguages}
           >
-            <ArrowLeftRight className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <ArrowLeftRight className="w-3.5 h-3.5" />
           </button>
 
-          {/* 화자 B 언어 */}
-          <div className="flex-1 flex items-center gap-1.5 bg-purple-50/60 dark:bg-purple-950/40 px-3 py-1.5 rounded-2xl border border-purple-100 dark:border-purple-900/60">
-            <span className="text-lg">{langB.flag}</span>
+          {/* 화자 B 언어 드롭다운 */}
+          <div className="flex-1 min-w-0 flex items-center gap-1 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-xl shadow-xs">
+            <span className="text-base shrink-0">{langB.flag}</span>
             <select
               value={langB.code}
               onChange={(e) => {
                 const found = SUPPORTED_LANGUAGES.find((l) => l.code === e.target.value);
                 if (found) setLangB(found);
               }}
-              className="w-full bg-transparent text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 border-none p-0 focus:ring-0 cursor-pointer"
+              className="w-full bg-transparent text-xs font-black text-purple-600 dark:text-purple-400 border-none p-0 focus:ring-0 cursor-pointer truncate"
             >
               {['동아시아', '동남아/남아시아', '유럽', '중동/기타'].map((cat) => (
                 <optgroup key={`b-cat-${cat}`} label={`--- ${cat} ---`} className="font-bold text-slate-400 bg-white dark:bg-slate-900">
@@ -309,49 +433,40 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
               ))}
             </select>
           </div>
-
         </div>
 
-        {/* 1:1 특화 도구 모음 */}
-        <div className="flex items-center gap-2">
+        {/* 퀵 툴 액션 버튼 그룹 */}
+        <div className="flex items-center gap-1 shrink-0">
           
-          {/* 마주보기 듀얼 스플릿 뷰 토글 */}
-          <button
-            onClick={() => setIsFaceToFace(!isFaceToFace)}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
-              isFaceToFace
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-500/20'
-                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-            }`}
-            title={t.faceToFaceMode}
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isFaceToFace ? 'animate-spin-slow text-amber-300' : ''}`} />
-            <span className="hidden sm:inline">{t.faceToFaceMode}</span>
-          </button>
-
-          {/* QR 코드 상대방 초대 버튼 */}
+          {/* QR 코드 상대방 초대 버튼 (호스트 전용) */}
           {!isGuestMode && (
             <button
               onClick={onOpenQRModal}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
+              className={`p-2 rounded-xl border transition-all active:scale-90 ${
                 isPeerConnected
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                  : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                  ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800'
+                  : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800'
               }`}
               title="상대방 스마트폰 QR 연결"
             >
-              <QrCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span className="hidden sm:inline">
-                {isPeerConnected ? t.qrConnected : t.qrInvite}
-              </span>
+              <QrCode className="w-4 h-4" />
             </button>
           )}
+
+          {/* 마주보기 듀얼 스플릿 뷰 토글 */}
+          <button
+            onClick={() => setIsFaceToFace(true)}
+            className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 transition-all active:scale-90"
+            title="마주보기 50:50 테이블 모드"
+          >
+            <RotateCw className="w-4 h-4" />
+          </button>
 
           {/* 대화 다운로드 */}
           <button
             onClick={handleDownload}
             disabled={messages.length === 0}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+            className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 transition-colors"
             title={t.downloadChat}
           >
             <Download className="w-4 h-4" />
@@ -361,43 +476,42 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
           <button
             onClick={onClearMessages}
             disabled={messages.length === 0}
-            className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-40 transition-colors"
+            className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30 transition-colors"
             title={t.clearHistory}
           >
             <Trash2 className="w-4 h-4" />
           </button>
-
         </div>
 
       </div>
 
-      {/* 1:1 실시간 통역 메인 채팅 캔버스 */}
-      <div className="flex-1 bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-y-auto flex flex-col gap-4 min-h-[380px] max-h-[calc(100vh-390px)] relative">
+      {/* 💬 실시간 대화 피드 (모바일 화면 최대 활용) */}
+      <div className="flex-1 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-3xl p-3.5 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-y-auto flex flex-col gap-3 min-h-[300px] relative">
         
         {messages.length === 0 && !activeMic && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-6 my-auto">
-            <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 flex items-center justify-center mb-4 text-indigo-600 dark:text-indigo-400 shadow-inner">
-              <Sparkles className="w-8 h-8 animate-pulse" />
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-4 my-auto">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center mb-3 text-indigo-600 dark:text-indigo-400 shadow-inner">
+              <Sparkles className="w-7 h-7 animate-pulse" />
             </div>
-            <h3 className="text-base sm:text-lg font-black text-slate-800 dark:text-slate-100 mb-2">
+            <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 mb-1">
               {t.historyEmptyTitle}
             </h3>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md leading-relaxed mb-6">
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed mb-5">
               {t.historyEmptyDesc}
             </p>
 
             {/* 빠른 추천 대화 칩 */}
-            <div className="w-full max-w-lg">
-              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-slate-400 mb-3">
+            <div className="w-full max-w-md">
+              <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-slate-400 mb-2">
                 <MessageSquarePlus className="w-3.5 h-3.5 text-indigo-500" />
-                <span>자주 쓰는 1:1 표현 바로 말하기:</span>
+                <span>원터치 빠른 추천 문장:</span>
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {QUICK_PROMPTS.map((prompt, idx) => (
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {QUICK_PROMPTS.slice(0, 6).map((prompt, idx) => (
                   <button
                     key={`quick-${idx}`}
                     onClick={() => processTranslation('A', prompt)}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 transition hover:border-indigo-300"
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 transition active:scale-95"
                   >
                     "{prompt}"
                   </button>
@@ -410,17 +524,14 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
         {/* 1:1 대화 버블 리스트 */}
         {messages.map((msg) => {
           const isA = msg.speakerId === 'A';
-          const isFlipped = isFaceToFace && !isA; // 마주보기 모드일 때 상대방(B)의 메시지는 180도 회전
 
           return (
             <div
               key={msg.id}
-              className={`flex flex-col ${isA ? 'items-start' : 'items-end'} transition-all ${
-                isFlipped ? 'rotate-180 mb-2' : ''
-              }`}
+              className={`flex flex-col ${isA ? 'items-start' : 'items-end'} animate-fade-in`}
             >
               {/* 화자 라벨 */}
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 mb-1 px-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1 px-1">
                 <span>{isA ? langA.flag : langB.flag}</span>
                 <span>{msg.speakerName}</span>
                 <span className="text-[10px] text-slate-400 font-normal">
@@ -430,14 +541,14 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
 
               {/* 통역 카드 */}
               <div
-                className={`max-w-[85%] sm:max-w-[75%] rounded-3xl p-4 shadow-sm border ${
+                className={`max-w-[88%] sm:max-w-[75%] rounded-3xl p-3.5 sm:p-4 shadow-sm border ${
                   isA
-                    ? 'bg-gradient-to-br from-indigo-50/90 to-blue-50/50 dark:from-indigo-950/50 dark:to-slate-800/80 border-indigo-100 dark:border-indigo-900/60 text-slate-900 dark:text-slate-100'
-                    : 'bg-gradient-to-br from-purple-50/90 to-pink-50/50 dark:from-purple-950/50 dark:to-slate-800/80 border-purple-100 dark:border-purple-900/60 text-slate-900 dark:text-slate-100'
+                    ? 'bg-gradient-to-br from-indigo-50/95 to-blue-50/70 dark:from-indigo-950/60 dark:to-slate-850 border-indigo-200/80 dark:border-indigo-900/60 text-slate-900 dark:text-slate-100'
+                    : 'bg-gradient-to-br from-purple-50/95 to-pink-50/70 dark:from-purple-950/60 dark:to-slate-850 border-purple-200/80 dark:border-purple-900/60 text-slate-900 dark:text-slate-100'
                 }`}
               >
                 {/* 원문 */}
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mb-2 border-b border-slate-200/50 dark:border-slate-700/50 pb-2">
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1.5 border-b border-slate-200/60 dark:border-slate-700/60 pb-1.5">
                   {msg.originalText}
                 </p>
 
@@ -447,17 +558,17 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
                 </p>
 
                 {/* 하단 컨트롤 */}
-                <div className="flex items-center justify-between gap-3 mt-3 pt-2 text-xs">
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                <div className="flex items-center justify-between gap-3 mt-2.5 pt-1.5 text-xs">
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 dark:text-indigo-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
                     <span>AI LIVE</span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     {/* TTS 다시듣기 */}
                     <button
                       onClick={() => speakText(msg.translatedText, msg.targetLang)}
-                      className="p-1.5 rounded-lg hover:bg-white/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
+                      className="p-1 rounded-lg hover:bg-white/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition active:scale-90"
                       title={t.speakAgain}
                     >
                       <Volume2 className="w-3.5 h-3.5" />
@@ -466,7 +577,7 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
                     {/* 복사 */}
                     <button
                       onClick={() => handleCopy(msg.id, msg.translatedText)}
-                      className="p-1.5 rounded-lg hover:bg-white/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
+                      className="p-1 rounded-lg hover:bg-white/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition active:scale-90"
                       title={t.copy}
                     >
                       {copiedId === msg.id ? (
@@ -485,18 +596,19 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
         {/* 실시간 음성 인식 중 인터림 버블 */}
         {activeMic && interimSpeech && (
           <div
-            className={`flex flex-col ${activeMic === 'A' ? 'items-start' : 'items-end'} animate-fade-in ${
-              isFaceToFace && activeMic === 'B' ? 'rotate-180' : ''
-            }`}
+            className={`flex flex-col ${activeMic === 'A' ? 'items-start' : 'items-end'} animate-fade-in`}
           >
-            <div className="flex items-center gap-2 text-xs font-bold text-indigo-500 mb-1 px-1">
+            <div className="flex items-center gap-1.5 text-xs font-extrabold text-indigo-500 mb-1 px-1">
               <Radio className="w-3.5 h-3.5 animate-pulse" />
               <span>{t.micListening}</span>
             </div>
-            <div className="max-w-[80%] rounded-3xl p-4 bg-indigo-500/10 border-2 border-dashed border-indigo-500 text-indigo-900 dark:text-indigo-200">
-              <p className="text-sm sm:text-base font-bold italic animate-pulse">
+            <div className="max-w-[85%] rounded-3xl p-3.5 bg-indigo-500/10 border-2 border-dashed border-indigo-500 text-indigo-900 dark:text-indigo-200 shadow-md flex flex-col gap-2">
+              <p className="text-sm font-bold italic animate-pulse">
                 "{interimSpeech}"
               </p>
+              <div className="h-4 flex items-center">
+                <AudioVisualizer isListening={true} />
+              </div>
             </div>
           </div>
         )}
@@ -504,129 +616,136 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
         <div ref={chatBottomRef} />
       </div>
 
-      {/* 1:1 양방향 대화 입력 및 마이크 패널 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        
-        {/* 화자 A 입력 패널 (내 스마트폰 / 한국어 등) */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-3 sm:p-4 shadow-sm border border-indigo-100 dark:border-indigo-950/80 flex flex-col gap-2 relative">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-base">{langA.flag}</span>
-              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                {t.speakerA} ({langA.name})
-              </span>
-            </div>
-            {activeMic === 'A' && (
-              <span className="text-[11px] font-bold text-rose-500 flex items-center gap-1 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-rose-500" />
-                {t.recording}
-              </span>
+      {/* 🎙️ [모바일 핵심 혁신] 엄지손가락 친화적 듀얼 보이스 액션 독 (Dual Voice Action Dock) */}
+      <div className="fixed bottom-3 inset-x-3 sm:inset-x-auto sm:right-6 sm:left-auto sm:w-[480px] z-30">
+        <div className="bg-slate-900/95 dark:bg-slate-900/95 backdrop-blur-2xl p-2.5 rounded-3xl shadow-2xl border border-slate-700/80 flex items-center justify-between gap-2">
+          
+          {/* 화자 A 원터치 마이크 버튼 */}
+          <button
+            onClick={() => toggleMic('A')}
+            className={`flex-1 h-14 rounded-2xl flex items-center justify-center gap-2 font-black text-xs sm:text-sm transition-all active:scale-95 relative overflow-hidden ${
+              activeMic === 'A'
+                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 animate-pulse ring-2 ring-white'
+                : 'bg-gradient-to-tr from-indigo-600 to-blue-500 text-white shadow-md shadow-indigo-500/30 hover:brightness-110'
+            }`}
+          >
+            {activeMic === 'A' ? (
+              <>
+                <MicOff className="w-5 h-5 animate-bounce" />
+                <span>듣는 중 (완료 시 탭)</span>
+              </>
+            ) : (
+              <>
+                <Mic className="w-5 h-5" />
+                <span className="truncate">{langA.flag} {langA.name} 말하기</span>
+              </>
             )}
-          </div>
+          </button>
 
-          {/* 파형 시각화 */}
-          {activeMic === 'A' && (
-            <div className="h-6 flex items-center justify-center">
-              <AudioVisualizer isListening={true} />
-            </div>
-          )}
+          {/* 중앙 텍스트 입력 토글 버튼 */}
+          <button
+            onClick={() => {
+              setIsTextInputOpen(!isTextInputOpen);
+            }}
+            className={`w-12 h-14 rounded-2xl flex flex-col items-center justify-center text-slate-300 hover:text-white border transition-all active:scale-90 shrink-0 ${
+              isTextInputOpen
+                ? 'bg-indigo-600 border-indigo-400 text-white'
+                : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+            }`}
+            title="텍스트 직접 입력"
+          >
+            <Send className="w-4 h-4" />
+            <span className="text-[9px] font-bold mt-0.5">글입력</span>
+          </button>
 
-          {/* 입력창 & 버튼 */}
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={inputTextA}
-              onChange={(e) => setInputTextA(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendText('A')}
-              placeholder={t.textPlaceholderA}
-              className="flex-1 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            />
+          {/* 화자 B 원터치 마이크 버튼 */}
+          <button
+            onClick={() => toggleMic('B')}
+            className={`flex-1 h-14 rounded-2xl flex items-center justify-center gap-2 font-black text-xs sm:text-sm transition-all active:scale-95 relative overflow-hidden ${
+              activeMic === 'B'
+                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 animate-pulse ring-2 ring-white'
+                : 'bg-gradient-to-tr from-purple-600 to-pink-500 text-white shadow-md shadow-purple-500/30 hover:brightness-110'
+            }`}
+          >
+            {activeMic === 'B' ? (
+              <>
+                <MicOff className="w-5 h-5 animate-bounce" />
+                <span>Listening (Tap to stop)</span>
+              </>
+            ) : (
+              <>
+                <Mic className="w-5 h-5" />
+                <span className="truncate">{langB.flag} {langB.name} Speak</span>
+              </>
+            )}
+          </button>
 
-            <button
-              onClick={() => handleSendText('A')}
-              disabled={!inputTextA.trim() || isTranslating}
-              className="p-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 transition-all active:scale-95 shrink-0 shadow-sm"
-              title="전송"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-
-            {/* 마이크 원터치 버튼 */}
-            <button
-              onClick={() => toggleMic('A')}
-              className={`p-2.5 rounded-2xl border transition-all active:scale-90 shrink-0 ${
-                activeMic === 'A'
-                  ? 'bg-rose-500 border-rose-600 text-white shadow-lg shadow-rose-500/30 animate-pulse'
-                  : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-600 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
-              }`}
-              title="화자 A 마이크"
-            >
-              {activeMic === 'A' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
-          </div>
         </div>
 
-        {/* 화자 B 입력 패널 (상대방 / 외국어) */}
-        <div className={`bg-white dark:bg-slate-900 rounded-3xl p-3 sm:p-4 shadow-sm border border-purple-100 dark:border-purple-950/80 flex flex-col gap-2 relative ${
-          isFaceToFace ? 'rotate-180' : ''
-        }`}>
-          <div className="flex items-center justify-between">
+        {/* ⌨️ 팝업 슬라이드업 텍스트 입력 바텀 시트 */}
+        {isTextInputOpen && (
+          <div className="absolute bottom-20 inset-x-0 bg-white dark:bg-slate-900 rounded-3xl p-3.5 shadow-2xl border-2 border-indigo-500/30 animate-fade-in z-40 backdrop-blur-xl">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setTextInputSpeaker('A')}
+                  className={`px-3 py-1 rounded-full text-xs font-extrabold transition ${
+                    textInputSpeaker === 'A'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  }`}
+                >
+                  {langA.flag} {langA.name}
+                </button>
+                <button
+                  onClick={() => setTextInputSpeaker('B')}
+                  className={`px-3 py-1 rounded-full text-xs font-extrabold transition ${
+                    textInputSpeaker === 'B'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  }`}
+                >
+                  {langB.flag} {langB.name}
+                </button>
+              </div>
+              <button
+                onClick={() => setIsTextInputOpen(false)}
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 p-1"
+              >
+                ✕ 닫기
+              </button>
+            </div>
+
             <div className="flex items-center gap-2">
-              <span className="text-base">{langB.flag}</span>
-              <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
-                {isPeerConnected ? t.peerPhone : t.speakerB} ({langB.name})
-              </span>
+              <input
+                type="text"
+                autoFocus
+                value={textInputSpeaker === 'A' ? inputTextA : inputTextB}
+                onChange={(e) => {
+                  if (textInputSpeaker === 'A') setInputTextA(e.target.value);
+                  else setInputTextB(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendText(textInputSpeaker)}
+                placeholder={
+                  textInputSpeaker === 'A'
+                    ? `${langA.name} 문장을 입력하세요...`
+                    : `Enter ${langB.name} sentence...`
+                }
+                className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+              <button
+                onClick={() => handleSendText(textInputSpeaker)}
+                disabled={
+                  !(textInputSpeaker === 'A' ? inputTextA.trim() : inputTextB.trim()) ||
+                  isTranslating
+                }
+                className="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs disabled:opacity-40 transition shrink-0 shadow-md"
+              >
+                전송
+              </button>
             </div>
-            {activeMic === 'B' && (
-              <span className="text-[11px] font-bold text-rose-500 flex items-center gap-1 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-rose-500" />
-                {t.recording}
-              </span>
-            )}
           </div>
-
-          {/* 파형 시각화 */}
-          {activeMic === 'B' && (
-            <div className="h-6 flex items-center justify-center">
-              <AudioVisualizer isListening={true} />
-            </div>
-          )}
-
-          {/* 입력창 & 버튼 */}
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={inputTextB}
-              onChange={(e) => setInputTextB(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendText('B')}
-              placeholder={t.textPlaceholderB}
-              className="flex-1 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-            />
-
-            <button
-              onClick={() => handleSendText('B')}
-              disabled={!inputTextB.trim() || isTranslating}
-              className="p-2.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-40 transition-all active:scale-95 shrink-0 shadow-sm"
-              title="전송"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-
-            {/* 마이크 원터치 버튼 */}
-            <button
-              onClick={() => toggleMic('B')}
-              className={`p-2.5 rounded-2xl border transition-all active:scale-90 shrink-0 ${
-                activeMic === 'B'
-                  ? 'bg-rose-500 border-rose-600 text-white shadow-lg shadow-rose-500/30 animate-pulse'
-                  : 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900 text-purple-600 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-              }`}
-              title="화자 B 마이크"
-            >
-              {activeMic === 'B' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
+        )}
       </div>
 
     </div>
