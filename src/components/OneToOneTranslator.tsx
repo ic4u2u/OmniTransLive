@@ -20,6 +20,8 @@ import type { Language, TranslationMessage } from '../types/translator';
 import type { UIStringDictionary } from '../i18n/translations';
 import { translateText, speakText, SpeechEngine } from '../services/translatorEngine';
 import { AudioVisualizer } from './AudioVisualizer';
+import { MyVoiceStudioModal } from './MyVoiceStudioModal';
+import { voiceCloneService, type VoiceProfile } from '../services/voiceCloneService';
 
 interface OneToOneTranslatorProps {
   messages: TranslationMessage[];
@@ -69,6 +71,33 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
   const [langB, setLangB] = useState<Language>(
     SUPPORTED_LANGUAGES.find((l) => l.code === 'en') || SUPPORTED_LANGUAGES[1]
   );
+
+  // 내 목소리 보이스 클론 상태
+  const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
+  const [isVoiceCloneEnabled, setIsVoiceCloneEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('omnitrans_voice_clone_enabled') === 'true';
+    }
+    return false;
+  });
+  const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState(false);
+
+  // 저장된 목소리 프로필 로드
+  useEffect(() => {
+    voiceCloneService.getSavedProfile().then((p) => {
+      setVoiceProfile(p);
+    });
+  }, []);
+
+  const handleToggleVoiceClone = (enabled: boolean) => {
+    setIsVoiceCloneEnabled(enabled);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('omnitrans_voice_clone_enabled', String(enabled));
+    }
+    if (enabled && !voiceProfile) {
+      setIsVoiceStudioOpen(true);
+    }
+  };
 
   // 마주보기 듀얼 스플릿 뷰 (테이블 맞은편 상대방 방향 180도 회전)
   const [isFaceToFace, setIsFaceToFace] = useState(false);
@@ -138,7 +167,9 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
       onDeductMinute();
 
       if (voiceEnabled) {
-        speakText(translated, targetLang);
+        // 화자 A(나)가 발화했을 때 내 목소리 클론 적용
+        const useClone = speaker === 'A' && isVoiceCloneEnabled;
+        speakText(translated, targetLang, voiceProfile, useClone);
       }
     } catch (err) {
       console.error('Translation error:', err);
@@ -617,7 +648,47 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
       </div>
 
       {/* 🎙️ [모바일 핵심 혁신] 엄지손가락 친화적 듀얼 보이스 액션 독 (Dual Voice Action Dock) */}
-      <div className="fixed bottom-3 inset-x-3 sm:inset-x-auto sm:right-6 sm:left-auto sm:w-[480px] z-30">
+      <div className="fixed bottom-3 inset-x-3 sm:inset-x-auto sm:right-6 sm:left-auto sm:w-[480px] z-30 flex flex-col gap-1.5">
+        
+        {/* 🌟 내 목소리 클론 (Qwen-TTS) 퀵 컨트롤 바 */}
+        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-indigo-500/30 text-xs shadow-lg">
+          <div 
+            onClick={() => setIsVoiceStudioOpen(true)}
+            className="flex items-center gap-1.5 cursor-pointer group"
+          >
+            <span className="flex h-2 w-2 relative">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isVoiceCloneEnabled ? 'bg-indigo-400' : 'bg-slate-500'} opacity-75`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isVoiceCloneEnabled ? 'bg-indigo-500' : 'bg-slate-400'}`} />
+            </span>
+            <span className="font-extrabold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent group-hover:brightness-125">
+              {voiceProfile ? '✨ 내 목소리 통역' : '🎙️ 내 목소리 3초 등록'}
+            </span>
+            <span className="text-[10px] text-slate-400 underline decoration-dotted">
+              {voiceProfile ? '설정' : '무료 체험'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-400 hidden xs:inline">
+              {isVoiceCloneEnabled ? '내 목소리 ON' : '일반 TTS'}
+            </span>
+            <button
+              onClick={() => handleToggleVoiceClone(!isVoiceCloneEnabled)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                isVoiceCloneEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+              }`}
+              title="내 목소리 통역 ON/OFF"
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
+                  isVoiceCloneEnabled ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* 듀얼 마이크 액션 버튼 바 */}
         <div className="bg-slate-900/95 dark:bg-slate-900/95 backdrop-blur-2xl p-2.5 rounded-3xl shadow-2xl border border-slate-700/80 flex items-center justify-between gap-2">
           
           {/* 화자 A 원터치 마이크 버튼 */}
@@ -684,7 +755,7 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
 
         {/* ⌨️ 팝업 슬라이드업 텍스트 입력 바텀 시트 */}
         {isTextInputOpen && (
-          <div className="absolute bottom-20 inset-x-0 bg-white dark:bg-slate-900 rounded-3xl p-3.5 shadow-2xl border-2 border-indigo-500/30 animate-fade-in z-40 backdrop-blur-xl">
+          <div className="absolute bottom-28 inset-x-0 bg-white dark:bg-slate-900 rounded-3xl p-3.5 shadow-2xl border-2 border-indigo-500/30 animate-fade-in z-40 backdrop-blur-xl">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <button
@@ -747,6 +818,15 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
           </div>
         )}
       </div>
+
+      {/* 🎙️ 내 목소리 보이스 클론 스튜디오 모달 */}
+      <MyVoiceStudioModal
+        isOpen={isVoiceStudioOpen}
+        onClose={() => setIsVoiceStudioOpen(false)}
+        isVoiceCloneEnabled={isVoiceCloneEnabled}
+        onToggleVoiceClone={handleToggleVoiceClone}
+        onProfileUpdated={(p) => setVoiceProfile(p)}
+      />
 
     </div>
   );

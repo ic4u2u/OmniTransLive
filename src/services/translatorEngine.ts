@@ -112,8 +112,22 @@ export async function translateText(
   return `[${targetName}] ${processedText}`;
 }
 
-// 음성 합성 (TTS) 지원
-export function speakText(text: string, langCode: string): void {
+import { voiceCloneService, type VoiceProfile } from './voiceCloneService';
+
+// 음성 합성 (TTS) 지원 - 내 목소리 프로필이 있으면 보이스 클론 우선 출력
+export function speakText(
+  text: string, 
+  langCode: string, 
+  profile?: VoiceProfile | null, 
+  isVoiceCloneEnabled?: boolean
+): void {
+  // 1. 내 목소리 클론 모드가 활성화되어 있고 프로필이 있는 경우
+  if (isVoiceCloneEnabled && profile) {
+    voiceCloneService.generateAndPlayClonedVoice(text, langCode, profile);
+    return;
+  }
+
+  // 2. 기본 브라우저 TTS
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return;
   }
