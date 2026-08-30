@@ -16,6 +16,7 @@ import {
 import { 
   voiceCloneService, 
   STANDARD_RECORDING_SCRIPT, 
+  RECORDING_SCRIPT_PRESETS,
   type VoiceProfile 
 } from '../services/voiceCloneService';
 
@@ -35,6 +36,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
   onProfileUpdated,
 }) => {
   const [profile, setProfile] = useState<VoiceProfile | null>(null);
+  const [selectedScript, setSelectedScript] = useState<string>(STANDARD_RECORDING_SCRIPT);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [volumeLevel, setVolumeLevel] = useState(0);
@@ -83,7 +85,7 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
 
     try {
       const audioBlob = await voiceCloneService.stopRecording();
-      const newProfile = await voiceCloneService.saveProfile(audioBlob, STANDARD_RECORDING_SCRIPT);
+      const newProfile = await voiceCloneService.saveProfile(audioBlob, selectedScript);
       setProfile(newProfile);
       onToggleVoiceClone(true);
       onProfileUpdated?.(newProfile);
@@ -163,17 +165,35 @@ export const MyVoiceStudioModal: React.FC<MyVoiceStudioModalProps> = ({
         {/* 메인 콘텐츠 스크롤 영역 */}
         <div className="flex-1 overflow-y-auto space-y-4 pr-1">
           
-          {/* 1. 표준 낭독 문장 카드 */}
-          <div className="bg-gradient-to-br from-indigo-50/80 via-purple-50/40 to-slate-50 dark:from-indigo-950/40 dark:via-purple-950/20 dark:to-slate-900 rounded-2xl p-3.5 border border-indigo-200/80 dark:border-indigo-900/60 relative">
-            <div className="flex items-center justify-between mb-1.5">
+          {/* 1. 표준 낭독 문장 카드 (프리셋 선택 지원) */}
+          <div className="bg-gradient-to-br from-indigo-50/80 via-purple-50/40 to-slate-50 dark:from-indigo-950/40 dark:via-purple-950/20 dark:to-slate-900 rounded-2xl p-3.5 border border-indigo-200/80 dark:border-indigo-900/60 relative space-y-2">
+            <div className="flex items-center justify-between">
               <span className="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 표준 낭독 문장 (3초)
               </span>
               <span className="text-[10px] text-slate-400">자연스럽게 읽어주세요</span>
             </div>
-            <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 leading-relaxed bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs">
-              "{STANDARD_RECORDING_SCRIPT}"
+
+            {/* 프리셋 선택 칩 3종 */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {['🌐 글로벌 소통', '✈️ 여행/비즈니스', '✨ 희망/연결'].map((label, idx) => (
+                <button
+                  key={`preset-${idx}`}
+                  onClick={() => setSelectedScript(RECORDING_SCRIPT_PRESETS[idx])}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 transition ${
+                    selectedScript === RECORDING_SCRIPT_PRESETS[idx]
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 leading-relaxed bg-white/90 dark:bg-slate-900/90 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-xs">
+              "{selectedScript}"
             </p>
           </div>
 

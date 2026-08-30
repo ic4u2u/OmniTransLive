@@ -5,7 +5,13 @@
  * - 자동 백엔드 연결 & 고성능 브라우저 바이오메트릭 포먼트 DSP 음색 변환 내장
  */
 
-export const STANDARD_RECORDING_SCRIPT = "모든 기회는 위기를 내포하고, 모든 위기는 기회를 내포합니다. 언어의 장벽을 넘어 전 세계와 자유롭게 소통합니다.";
+export const RECORDING_SCRIPT_PRESETS = [
+  "언어의 장벽을 넘어 전 세계와 연결됩니다. 나의 목소리로 어디서나 자유롭게 소통합니다.",
+  "안녕하세요, 옴니트랜스 실시간 통역기입니다. 언제 어디서든 편안하고 자연스럽게 대화하세요.",
+  "새로운 사람들과 마음을 나누고 세상을 만납니다. 서로의 이야기를 가장 진솔하게 전해보세요."
+];
+
+export const STANDARD_RECORDING_SCRIPT = RECORDING_SCRIPT_PRESETS[0];
 
 export interface VoiceBiometrics {
   pitchHz: number;          // 기본 주파수 (예: 남성 85-160Hz, 여성 165-255Hz)
