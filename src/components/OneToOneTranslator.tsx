@@ -13,15 +13,17 @@ import {
   QrCode,
   RotateCw,
   MessageSquarePlus,
-  Radio
+  Radio,
+  Zap,
+  Settings
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES } from '../types/translator';
 import type { Language, TranslationMessage } from '../types/translator';
 import type { UIStringDictionary } from '../i18n/translations';
 import { translateText, speakText, SpeechEngine } from '../services/translatorEngine';
 import { AudioVisualizer } from './AudioVisualizer';
-import { MyVoiceStudioModal } from './MyVoiceStudioModal';
-import { voiceCloneService, type VoiceProfile } from '../services/voiceCloneService';
+import { geminiLiveTranslateService } from '../services/geminiLiveTranslateService';
+import { GeminiLiveSettingsModal } from './GeminiLiveSettingsModal';
 
 interface OneToOneTranslatorProps {
   messages: TranslationMessage[];
@@ -72,33 +74,6 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
     SUPPORTED_LANGUAGES.find((l) => l.code === 'en') || SUPPORTED_LANGUAGES[1]
   );
 
-  // 내 목소리 보이스 클론 상태
-  const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
-  const [isVoiceCloneEnabled, setIsVoiceCloneEnabled] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('omnitrans_voice_clone_enabled') === 'true';
-    }
-    return false;
-  });
-  const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState(false);
-
-  // 저장된 목소리 프로필 로드
-  useEffect(() => {
-    voiceCloneService.getSavedProfile().then((p) => {
-      setVoiceProfile(p);
-    });
-  }, []);
-
-  const handleToggleVoiceClone = (enabled: boolean) => {
-    setIsVoiceCloneEnabled(enabled);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('omnitrans_voice_clone_enabled', String(enabled));
-    }
-    if (enabled && !voiceProfile) {
-      setIsVoiceStudioOpen(true);
-    }
-  };
-
   // 마주보기 듀얼 스플릿 뷰 (테이블 맞은편 상대방 방향 180도 회전)
   const [isFaceToFace, setIsFaceToFace] = useState(false);
 
@@ -115,18 +90,59 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
   const speechEngineRef = useRef<SpeechEngine | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
+  // Gemini Live 실시간 번역 모드 상태
+  const [isGeminiLiveMode, setIsGeminiLiveMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('omnitrans_gemini_live_mode');
+      return saved !== 'false'; // 기본 ON
+    }
+    return true;
+  });
+  const [geminiStatus, setGeminiStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [isGeminiSettingsOpen, setIsGeminiSettingsOpen] = useState(false);
+  const [liveInputTranscript, setLiveInputTranscript] = useState('');
+  const [liveOutputTranscript, setLiveOutputTranscript] = useState('');
+
+  const geminiSpeakerRef = useRef<'A' | 'B' | null>(null);
+  const liveInputRef = useRef('');
+  const liveOutputRef = useRef('');
+
+  useEffect(() => {
+    liveInputRef.current = liveInputTranscript;
+  }, [liveInputTranscript]);
+
+  useEffect(() => {
+    liveOutputRef.current = liveOutputTranscript;
+  }, [liveOutputTranscript]);
+
+  const handleToggleGeminiLiveMode = (enabled: boolean) => {
+    setIsGeminiLiveMode(enabled);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('omnitrans_gemini_live_mode', String(enabled));
+    }
+    if (activeMic) {
+      if (isGeminiLiveMode) {
+        geminiLiveTranslateService.stopSession();
+      } else {
+        speechEngineRef.current?.stopListening();
+      }
+      setActiveMic(null);
+    }
+  };
+
   // 음성 엔진 초기화
   useEffect(() => {
     speechEngineRef.current = new SpeechEngine();
     return () => {
       speechEngineRef.current?.stopListening();
+      geminiLiveTranslateService.stopSession();
     };
   }, []);
 
   // 새 메시지 시 자동 스크롤
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, interimSpeech]);
+  }, [messages, interimSpeech, liveInputTranscript, liveOutputTranscript]);
 
   // 언어 교환
   const handleSwapLanguages = () => {
@@ -135,7 +151,41 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
     setLangB(temp);
   };
 
-  // 번역 실행 및 메시지 전송
+  // Gemini Live 완료 시 최종 메시지 기록
+  const finalizeGeminiTurn = () => {
+    const spk = geminiSpeakerRef.current;
+    const inText = liveInputRef.current.trim();
+    const outText = liveOutputRef.current.trim();
+
+    if (spk && inText && outText) {
+      const sourceLang = spk === 'A' ? langA.code : langB.code;
+      const targetLang = spk === 'A' ? langB.code : langA.code;
+      const speakerName =
+        spk === 'A'
+          ? `${t.speakerA} (${langA.name})`
+          : isPeerConnected
+          ? `${t.peerPhone} (${langB.name})`
+          : `${t.speakerB} (${langB.name})`;
+
+      const newMsg: TranslationMessage = {
+        id: 'msg_gemini_' + Date.now() + Math.random().toString(36).substring(2, 6),
+        speakerId: spk,
+        speakerName,
+        originalText: inText,
+        sourceLang,
+        targetLang,
+        translatedText: outText,
+        timestamp: new Date(),
+      };
+
+      onAddMessage(newMsg);
+      onDeductMinute();
+      setLiveInputTranscript('');
+      setLiveOutputTranscript('');
+    }
+  };
+
+  // 번역 실행 및 메시지 전송 (텍스트 입력 및 일반 STT 모드용)
   const processTranslation = async (speaker: 'A' | 'B', text: string) => {
     if (!text.trim() || isTranslating) return;
 
@@ -167,9 +217,7 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
       onDeductMinute();
 
       if (voiceEnabled) {
-        // 화자 A(나)가 발화했을 때 내 목소리 클론 적용
-        const useClone = speaker === 'A' && isVoiceCloneEnabled;
-        speakText(translated, targetLang, voiceProfile, useClone);
+        speakText(translated, targetLang);
       }
     } catch (err) {
       console.error('Translation error:', err);
@@ -184,23 +232,72 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
   const [textInputSpeaker, setTextInputSpeaker] = useState<'A' | 'B'>('A');
 
   // 마이크 토글
-  const toggleMic = (speaker: 'A' | 'B') => {
+  const toggleMic = async (speaker: 'A' | 'B') => {
     if (activeMic === speaker) {
-      speechEngineRef.current?.stopListening();
+      if (isGeminiLiveMode) {
+        geminiLiveTranslateService.stopSession();
+        finalizeGeminiTurn();
+      } else {
+        speechEngineRef.current?.stopListening();
+      }
       setActiveMic(null);
       setInterimSpeech('');
       return;
     }
 
     if (activeMic !== null) {
-      speechEngineRef.current?.stopListening();
+      if (isGeminiLiveMode) {
+        geminiLiveTranslateService.stopSession();
+        finalizeGeminiTurn();
+      } else {
+        speechEngineRef.current?.stopListening();
+      }
     }
 
     setActiveMic(speaker);
-    const targetLangCode = speaker === 'A' ? langA.code : langB.code;
+    geminiSpeakerRef.current = speaker;
+    setLiveInputTranscript('');
+    setLiveOutputTranscript('');
+    setInterimSpeech('');
 
+    // 1. ⚡ Gemini Live 초저지연 실시간 동시통역 모드
+    if (isGeminiLiveMode) {
+      if (!geminiLiveTranslateService.isKeyConfigured()) {
+        setIsGeminiSettingsOpen(true);
+        setActiveMic(null);
+        return;
+      }
+
+      const targetLangCode = speaker === 'A' ? langB.code : langA.code;
+      const started = await geminiLiveTranslateService.startSession(targetLangCode, {
+        onInputTranscription: (text) => {
+          setLiveInputTranscript((prev) => (prev ? prev + ' ' + text : text));
+        },
+        onOutputTranscription: (text) => {
+          setLiveOutputTranscript((prev) => (prev ? prev + ' ' + text : text));
+        },
+        onTurnComplete: () => {
+          finalizeGeminiTurn();
+        },
+        onError: (error) => {
+          console.warn('Gemini Live Error:', error);
+          setActiveMic(null);
+        },
+        onStatusChange: (status) => {
+          setGeminiStatus(status);
+        },
+      });
+
+      if (!started) {
+        setActiveMic(null);
+      }
+      return;
+    }
+
+    // 2. 브라우저 내장 음성인식 모드
+    const sourceLangCode = speaker === 'A' ? langA.code : langB.code;
     const started = speechEngineRef.current?.startListening({
-      langCode: targetLangCode,
+      langCode: sourceLangCode,
       onInterimResult: (interim) => {
         setInterimSpeech(interim);
       },
@@ -625,7 +722,55 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
         })}
 
         {/* 실시간 음성 인식 중 인터림 버블 */}
-        {activeMic && interimSpeech && (
+        {/* ⚡ Gemini Live 초저지연 실시간 동시통역 버블 */}
+        {activeMic && isGeminiLiveMode && (liveInputTranscript || liveOutputTranscript) && (
+          <div
+            className={`flex flex-col ${activeMic === 'A' ? 'items-start' : 'items-end'} animate-fade-in`}
+          >
+            <div className="flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-blue-500 to-indigo-500 bg-clip-text text-transparent mb-1 px-1">
+              <Zap className="w-3.5 h-3.5 text-indigo-500 animate-bounce" />
+              <span>Gemini 3.5 Live 동시통역 스트리밍 중</span>
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+              </span>
+            </div>
+
+            <div className="max-w-[90%] sm:max-w-[80%] rounded-3xl p-4 bg-gradient-to-br from-indigo-900/90 to-slate-900/95 text-white shadow-2xl border-2 border-indigo-500/50 backdrop-blur-xl flex flex-col gap-2.5">
+              {liveInputTranscript && (
+                <div>
+                  <div className="text-[10px] uppercase font-extrabold tracking-wider text-indigo-300/80 mb-0.5">
+                    Original Speech (16kHz PCM)
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-300 font-medium italic leading-relaxed">
+                    "{liveInputTranscript}"
+                  </p>
+                </div>
+              )}
+
+              {liveOutputTranscript && (
+                <div className="pt-2 border-t border-indigo-500/30">
+                  <div className="text-[10px] uppercase font-extrabold tracking-wider text-cyan-300/90 mb-0.5 flex items-center gap-1">
+                    <span>Translated Audio & Subtitles (24kHz AI Voice)</span>
+                  </div>
+                  <p className="text-sm sm:text-base font-black text-white leading-relaxed">
+                    {liveOutputTranscript}
+                  </p>
+                </div>
+              )}
+
+              <div className="h-4 flex items-center justify-between pt-1">
+                <AudioVisualizer isListening={true} />
+                <span className="text-[10px] font-bold text-indigo-400">
+                  말을 끝내려면 마이크 버튼을 다시 탭하세요
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 일반 Web Speech API 음성 인식 중 인터림 버블 */}
+        {activeMic && !isGeminiLiveMode && interimSpeech && (
           <div
             className={`flex flex-col ${activeMic === 'A' ? 'items-start' : 'items-end'} animate-fade-in`}
           >
@@ -650,38 +795,47 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
       {/* 🎙️ [모바일 핵심 혁신] 엄지손가락 친화적 듀얼 보이스 액션 독 (Dual Voice Action Dock) */}
       <div className="fixed bottom-3 inset-x-3 sm:inset-x-auto sm:right-6 sm:left-auto sm:w-[480px] z-30 flex flex-col gap-1.5">
         
-        {/* 🌟 내 목소리 클론 (Qwen-TTS) 퀵 컨트롤 바 */}
-        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-indigo-500/30 text-xs shadow-lg">
+        {/* ⚡ Gemini Live 실시간 동시통역 퀵 컨트롤 바 */}
+        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-2xl border border-indigo-500/40 text-xs shadow-lg">
           <div 
-            onClick={() => setIsVoiceStudioOpen(true)}
-            className="flex items-center gap-1.5 cursor-pointer group"
+            onClick={() => setIsGeminiSettingsOpen(true)}
+            className="flex items-center gap-1.5 cursor-pointer group select-none"
+            title="Gemini API 키 및 모델 설정"
           >
             <span className="flex h-2 w-2 relative">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isVoiceCloneEnabled ? 'bg-indigo-400' : 'bg-slate-500'} opacity-75`} />
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${isVoiceCloneEnabled ? 'bg-indigo-500' : 'bg-slate-400'}`} />
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isGeminiLiveMode ? 'bg-cyan-400' : 'bg-slate-500'} opacity-75`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isGeminiLiveMode ? 'bg-cyan-500' : 'bg-slate-400'}`} />
             </span>
-            <span className="font-extrabold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent group-hover:brightness-125">
-              {voiceProfile ? '✨ 내 목소리 통역' : '🎙️ 내 목소리 3초 등록'}
+            <span className="font-extrabold bg-gradient-to-r from-blue-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent group-hover:brightness-125 flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Gemini 3.5 Live 동시통역</span>
             </span>
-            <span className="text-[10px] text-slate-400 underline decoration-dotted">
-              {voiceProfile ? '설정' : '무료 체험'}
+            <span className="text-[10px] text-indigo-300 underline decoration-dotted flex items-center gap-0.5">
+              <Settings className="w-3 h-3" />
+              <span>설정</span>
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-slate-400 hidden xs:inline">
-              {isVoiceCloneEnabled ? '내 목소리 ON' : '일반 TTS'}
+            <span className="text-[10px] font-bold text-slate-300 hidden xs:inline">
+              {isGeminiLiveMode
+                ? geminiStatus === 'connecting'
+                  ? '연결 중...'
+                  : geminiStatus === 'connected'
+                  ? '⚡ 스트리밍 중'
+                  : 'Live 스트리밍 ON'
+                : '브라우저 모드'}
             </span>
             <button
-              onClick={() => handleToggleVoiceClone(!isVoiceCloneEnabled)}
+              onClick={() => handleToggleGeminiLiveMode(!isGeminiLiveMode)}
               className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
-                isVoiceCloneEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                isGeminiLiveMode ? 'bg-gradient-to-r from-blue-600 to-indigo-600' : 'bg-slate-700'
               }`}
-              title="내 목소리 통역 ON/OFF"
+              title="Gemini Live 동시통역 ON/OFF"
             >
               <div
                 className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
-                  isVoiceCloneEnabled ? 'translate-x-4' : 'translate-x-0'
+                  isGeminiLiveMode ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>
@@ -819,13 +973,11 @@ export const OneToOneTranslator: React.FC<OneToOneTranslatorProps> = ({
         )}
       </div>
 
-      {/* 🎙️ 내 목소리 보이스 클론 스튜디오 모달 */}
-      <MyVoiceStudioModal
-        isOpen={isVoiceStudioOpen}
-        onClose={() => setIsVoiceStudioOpen(false)}
-        isVoiceCloneEnabled={isVoiceCloneEnabled}
-        onToggleVoiceClone={handleToggleVoiceClone}
-        onProfileUpdated={(p) => setVoiceProfile(p)}
+      {/* ⚡ Gemini Live 설정 모달 */}
+      <GeminiLiveSettingsModal
+        isOpen={isGeminiSettingsOpen}
+        onClose={() => setIsGeminiSettingsOpen(false)}
+        t={t}
       />
 
     </div>

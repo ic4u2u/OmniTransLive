@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Volume2, VolumeX, Globe, Sparkles, Database, Layers, QrCode, Check, ChevronDown, Sun, Moon, Lock } from 'lucide-react';
+import { Volume2, VolumeX, Globe, Sparkles, Database, Layers, QrCode, Check, ChevronDown, Sun, Moon, Lock, Zap } from 'lucide-react';
 import type { SessionMode, UserAccount } from '../types/translator';
 import { UI_LANGUAGE_OPTIONS, type UILanguage, type UIStringDictionary } from '../i18n/translations';
+import { GeminiLiveSettingsModal } from './GeminiLiveSettingsModal';
 
 interface HeaderProps {
   currentMode: SessionMode;
@@ -39,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminLogin,
 }) => {
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const currentLangObj = UI_LANGUAGE_OPTIONS.find((l) => l.code === uiLang) || UI_LANGUAGE_OPTIONS[0];
@@ -187,6 +189,16 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
+          {/* ⚡ Gemini Live 실시간 통역 설정 버튼 */}
+          <button
+            onClick={() => setIsGeminiModalOpen(true)}
+            title="Gemini Live 실시간 통역 설정 (API 키)"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-black bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-cyan-500/10 hover:from-blue-500/20 hover:to-cyan-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 transition-all shadow-sm shrink-0 active:scale-95"
+          >
+            <Zap className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="hidden md:inline">Gemini Live</span>
+          </button>
+
           {/* QR 코드 상대방 초대 버튼 */}
           <button
             onClick={onOpenQRModal}
@@ -264,6 +276,13 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
       </div>
+
+      {/* ⚡ Gemini Live 설정 모달 */}
+      <GeminiLiveSettingsModal
+        isOpen={isGeminiModalOpen}
+        onClose={() => setIsGeminiModalOpen(false)}
+        t={t}
+      />
     </header>
   );
 };

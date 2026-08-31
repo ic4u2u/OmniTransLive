@@ -112,52 +112,64 @@ export async function translateText(
   return `[${targetName}] ${processedText}`;
 }
 
-import { voiceCloneService, type VoiceProfile } from './voiceCloneService';
-
-// 음성 합성 (TTS) 지원 - 내 목소리 프로필이 있으면 보이스 클론 우선 출력
-export function speakText(
-  text: string, 
-  langCode: string, 
-  profile?: VoiceProfile | null, 
-  isVoiceCloneEnabled?: boolean
-): void {
-  // 1. 내 목소리 클론 모드가 활성화되어 있고 프로필이 있는 경우
-  if (isVoiceCloneEnabled && profile) {
-    voiceCloneService.generateAndPlayClonedVoice(text, langCode, profile);
+// 음성 합성 (TTS) 지원 - 브라우저 Web Speech API 및 표준 TTS
+export function speakText(text: string, langCode: string): void {
+  if (typeof window === 'undefined') {
     return;
   }
-
-  // 2. 기본 브라우저 TTS
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    return;
-  }
-
-  // 모바일 안드로이드/아이폰 오디오 락 해제
-  window.speechSynthesis.resume();
-  window.speechSynthesis.cancel();
 
   const langObj = SUPPORTED_LANGUAGES.find((l) => l.code === langCode);
   const voiceCode = langObj?.voiceCode || 'en-US';
 
-  setTimeout(() => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = voiceCode;
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-
-    // 최적의 목소리 매칭
-    const voices = window.speechSynthesis.getVoices();
-    const matchedVoice = voices.find((v) => v.lang === voiceCode || v.lang.startsWith(langCode));
-    if (matchedVoice) {
-      utterance.voice = matchedVoice;
-    }
-
+  if ('speechSynthesis' in window) {
     try {
-      window.speechSynthesis.speak(utterance);
+      // 모바일 안드로이드/아이폰 오디오 락 해제
+      window.speechSynthesis.resume();
+      window.speechSynthesis.cancel();
+
+      setTimeout(() => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = voiceCode;
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        // 최적의 목소리 매칭
+        const voices = window.speechSynthesis.getVoices();
+        const matchedVoice = voices.find(
+          (v) => v.lang === voiceCode || v.lang.startsWith(langCode.split('-')[0])
+        );
+        if (matchedVoice) {
+          utterance.voice = matchedVoice;
+        }
+
+        utterance.onerror = () => {
+          playFallbackGoogleTTS(text, langCode);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }, 30);
+      return;
     } catch (e) {
-      console.warn('Speech synthesis speak error:', e);
+      console.warn('Speech synthesis speak error, using fallback:', e);
     }
-  }, 30);
+  }
+
+  // Web Speech API 미지원 브라우저 Fallback
+  playFallbackGoogleTTS(text, langCode);
+}
+
+// Google TTS Fallback 오디오 재생
+function playFallbackGoogleTTS(text: string, langCode: string): void {
+  try {
+    const shortLang = langCode.split('-')[0] || 'en';
+    const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${shortLang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+    const audio = new Audio(audioUrl);
+    audio.play().catch((err) => {
+      console.warn('Google TTS audio playback failed:', err);
+    });
+  } catch (err) {
+    console.warn('Fallback audio creation error:', err);
+  }
 }
 
 // Speech Recognition 인터페이스
